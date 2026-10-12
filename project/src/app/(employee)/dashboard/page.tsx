@@ -1,22 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  Shield,
-  FileText,
-  ArrowRight,
+  ArrowForward,
+  CalendarToday,
+  CheckCircleOutlined,
   Download,
-  Calendar,
-  Lock,
-  Edit3,
-  ExternalLink,
-  Award,
-  LogOut,
-  ChevronDown,
-  CheckCircle2
-} from "lucide-react";
+  EditOutlined,
+  FilePresentOutlined,
+  MilitaryTechOutlined,
+  SecurityOutlined,
+} from "@mui/icons-material";
+import {
+  Avatar,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CircularProgress,
+  Container,
+  Divider,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { sebsaColors } from "@/lib/theme";
+import { Navbar } from "@/components/Navbar";
 
 interface UserData {
   id: string;
@@ -26,7 +37,7 @@ interface UserData {
   roleTitle: string;
   employeeIdCode: string;
   tierBadge: string;
-  joinedDate: string;
+  joinedDate: string | Date;
 }
 
 interface ActiveCycle {
@@ -43,8 +54,48 @@ interface CertificateItem {
   completedDate: string;
   idCode: string;
   score: string;
-  downloadUrl: string;
 }
+
+const certificates: CertificateItem[] = [
+  {
+    id: "cert-1",
+    title: "SEBSA Internal Assessment — 2026 H1",
+    badge: "Compliant",
+    badgeType: "compliant",
+    completedDate: "18 Apr 2026",
+    idCode: "CR-26-081",
+    score: "9 / 10",
+  },
+  {
+    id: "cert-2",
+    title: "SEBSA Internal Assessment — 2025 H2",
+    badge: "Compliant",
+    badgeType: "compliant",
+    completedDate: "12 Oct 2025",
+    idCode: "CR-25-419",
+    score: "8 / 10",
+  },
+  {
+    id: "cert-3",
+    title: "SEBSA Internal Assessment — 2025 H1",
+    badge: "Top Score (100%)",
+    badgeType: "top",
+    completedDate: "20 Apr 2025",
+    idCode: "CR-25-102",
+    score: "10 / 10",
+  },
+  {
+    id: "cert-4",
+    title: "SEBSA Internal Assessment — 2024 H2",
+    badge: "Compliant",
+    badgeType: "compliant",
+    completedDate: "15 Oct 2024",
+    idCode: "CR-24-904",
+    score: "9 / 10",
+  },
+];
+
+const colors = sebsaColors;
 
 export default function EmployeeDashboardPage() {
   const router = useRouter();
@@ -52,14 +103,13 @@ export default function EmployeeDashboardPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [activeCycle, setActiveCycle] = useState<ActiveCycle | null>(null);
   const [pendingAssessment, setPendingAssessment] = useState(true);
-  const [currentAttempt, setCurrentAttempt] = useState<any>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [currentAttempt, setCurrentAttempt] = useState<{ score: number } | null>(null);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const res = await fetch("/api/auth");
-        const json = await res.json();
+        const response = await fetch("/api/auth");
+        const json = await response.json();
         if (!json.success || json.data.user.role !== "employee") {
           router.push("/login");
           return;
@@ -69,353 +119,203 @@ export default function EmployeeDashboardPage() {
         setActiveCycle(json.data.activeCycle);
         setPendingAssessment(json.data.pendingAssessment);
         setCurrentAttempt(json.data.currentAttempt);
-      } catch (err) {
-        console.error("Failed to load profile:", err);
+      } catch (error) {
+        console.error("Failed to load profile:", error);
       } finally {
         setLoading(false);
       }
     }
+
     loadData();
   }, [router]);
 
-  const handleLogout = async () => {
-    await fetch("/api/auth", { method: "DELETE" });
-    router.push("/login");
-  };
-
-  // Historical records matching the Stitch design
-  const defaultCertificates: CertificateItem[] = [
-    {
-      id: "cert-1",
-      title: "SEBSA Internal Assessment — 2026 H1",
-      badge: "Compliant",
-      badgeType: "compliant",
-      completedDate: "18 Apr 2026",
-      idCode: "CR-26-081",
-      score: "9 / 10",
-      downloadUrl: "#",
-    },
-    {
-      id: "cert-2",
-      title: "SEBSA Internal Assessment — 2025 H2",
-      badge: "Compliant",
-      badgeType: "compliant",
-      completedDate: "12 Oct 2025",
-      idCode: "CR-25-419",
-      score: "8 / 10",
-      downloadUrl: "#",
-    },
-    {
-      id: "cert-3",
-      title: "SEBSA Internal Assessment — 2025 H1",
-      badge: "Top Score (100%)",
-      badgeType: "top",
-      completedDate: "20 Apr 2025",
-      idCode: "CR-25-102",
-      score: "10 / 10",
-      downloadUrl: "#",
-    },
-    {
-      id: "cert-4",
-      title: "SEBSA Internal Assessment — 2024 H2",
-      badge: "Compliant",
-      badgeType: "compliant",
-      completedDate: "15 Oct 2024",
-      idCode: "CR-24-904",
-      score: "9 / 10",
-      downloadUrl: "#",
-    },
-  ];
+  const initials = useMemo(
+    () =>
+      user?.fullName
+        ?.split(" ")
+        .map((name) => name[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase() || "SW",
+    [user?.fullName],
+  );
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8f9fd]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-[#5c4cf4] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium text-gray-500">Loading user profile...</p>
-        </div>
-      </div>
+      <Box sx={{ minHeight: "100vh", display: "grid", placeItems: "center", bgcolor: colors.page }}>
+        <Stack spacing={1.5} sx={{ alignItems: "center" }}>
+          <CircularProgress size={30} />
+          <Typography variant="body2" color="text.secondary">
+            Loading user profile...
+          </Typography>
+        </Stack>
+      </Box>
     );
   }
 
-  const initials = user?.fullName
-    ? user.fullName
-        .split(" ")
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()
-    : "SW";
-
   return (
-    <div className="min-h-screen bg-[#f8f9fd] text-gray-800 flex flex-col">
-      {/* Top Navigation Bar */}
-      <header className="w-full bg-white border-b border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.02)] sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xl font-extrabold text-[#5c4cf4] tracking-tight">SEBSA</span>
-          </div>
+    <Box sx={{ minHeight: "100vh", bgcolor: colors.page, color: colors.ink }}>
+      <Navbar userName={user?.fullName} userEmail={user?.email} />
 
-          {/* User Profile Pill */}
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-full hover:bg-gray-50 transition border border-transparent hover:border-gray-200"
-            >
-              <div className="w-8 h-8 rounded-full bg-[#f0edff] text-[#5c4cf4] font-bold text-xs flex items-center justify-center">
-                {initials}
-              </div>
-              <span className="text-xs font-medium text-gray-700 hidden sm:inline">
-                {user?.email}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-            </button>
+      <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4 }, py: { xs: 3, sm: 4, md: 5 } }}>
+        <Stack direction={{ xs: "column", lg: "row" }} spacing={{ xs: 2.5, md: 3.5 }} sx={{ alignItems: "stretch" }}>
+          <Card sx={{ width: { xs: "100%", lg: 320 }, flexShrink: 0, borderRadius: 2.5, borderTop: `4px solid ${colors.primary}` }}>
+            <CardContent sx={{ p: { xs: 2.5, sm: 3.25 }, "&:last-child": { pb: { xs: 2.5, sm: 3.25 } } }}>
+              <Stack sx={{ alignItems: "center", textAlign: "center" }}>
+                <Box sx={{ position: "relative", mt: 0.5 }}>
+                  <Avatar sx={{ width: 72, height: 72, bgcolor: colors.lavender, color: colors.primary, fontSize: 24, fontWeight: 800 }}>
+                    {initials}
+                  </Avatar>
+                  <Box sx={{ position: "absolute", right: 1, bottom: 2, width: 14, height: 14, bgcolor: colors.green, border: "3px solid #fff", borderRadius: "50%" }} />
+                </Box>
+                <Typography sx={{ mt: 1.5, fontSize: { xs: 18, sm: 20 }, fontWeight: 700 }}>{user?.fullName}</Typography>
+                <Typography sx={{ mt: 0.5, fontSize: { xs: 12, sm: 13 }, color: colors.muted }}>{user?.roleTitle}</Typography>
+              </Stack>
 
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50">
-                <div className="px-4 py-2 border-b border-gray-50">
-                  <p className="text-xs font-semibold text-gray-800">{user?.fullName}</p>
-                  <p className="text-[11px] text-gray-400 truncate">{user?.email}</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full px-4 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition"
-                >
-                  <LogOut className="w-3.5 h-3.5" /> Log Out
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Dashboard */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Column: User Profile Card (4 cols) */}
-          <div className="lg:col-span-4">
-            <div className="bg-white rounded-[26px] border border-purple-100/70 shadow-[0_10px_30px_-5px_rgba(92,76,244,0.06)] p-7 flex flex-col items-center text-center relative">
-              {/* Avatar circle with online badge */}
-              <div className="relative mt-2">
-                <div className="w-24 h-24 rounded-full bg-[#ede9fe] text-[#5c4cf4] font-extrabold text-2xl flex items-center justify-center shadow-inner">
-                  {initials}
-                </div>
-                <div className="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white absolute bottom-1 right-1 shadow-sm" />
-              </div>
-
-              {/* Name & Title */}
-              <h2 className="text-xl font-bold text-gray-900 mt-4">{user?.fullName}</h2>
-              <p className="text-xs text-gray-500 mt-1 font-medium">{user?.roleTitle}</p>
-
-              {/* Certification Tier Badge */}
-              <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#f5f3ff] text-[#5c4cf4] border border-purple-200/60">
-                <Shield className="w-3.5 h-3.5" />
-                {user?.tierBadge}
-              </div>
-
-              <div className="w-full my-6 border-t border-gray-100" />
-
-              {/* Metadata Key-Value List */}
-              <div className="w-full space-y-4 text-left">
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">
-                    Email
-                  </span>
-                  <p className="text-xs font-medium text-gray-800 mt-0.5 truncate">{user?.email}</p>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">
-                      Employee ID
-                    </span>
-                    <span className="text-[10px] font-semibold text-gray-400">Internal Staff</span>
-                  </div>
-                  <p className="text-xs font-semibold text-gray-800 mt-0.5">{user?.employeeIdCode}</p>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">
-                    Department
-                  </span>
-                  <p className="text-xs font-semibold text-gray-800 mt-0.5">{user?.department}</p>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">
-                    Date Joined
-                  </span>
-                  <p className="text-xs font-medium text-gray-700 mt-0.5 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                    March 15, 2021
-                  </p>
-                </div>
-              </div>
-
-              {/* Edit Profile Action */}
-              <button
-                type="button"
-                onClick={() => alert("Profile edits are managed by SEBSA HR directory.")}
-                className="mt-6 w-full py-2.5 border border-[#5c4cf4]/30 hover:border-[#5c4cf4] text-[#5c4cf4] hover:bg-purple-50/50 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
-              >
-                <Edit3 className="w-3.5 h-3.5" /> Edit Profile
-              </button>
-
-              {/* Bottom Security Footer */}
-              <div className="mt-6 flex items-center justify-center gap-1 text-[10px] font-bold text-gray-400 tracking-wider uppercase">
-                <span>Authenticated SEBSA ID</span>
-                <Lock className="w-3 h-3 text-gray-400" />
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Actions & Certificate History (8 cols) */}
-          <div className="lg:col-span-8 flex flex-col gap-6">
-            {/* Top Card: Pending Assessment Prompt */}
-            {pendingAssessment ? (
-              <div className="bg-[#f5f3ff] border border-purple-200/90 rounded-[22px] p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-5 transition hover:shadow-md">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-white text-[#5c4cf4] border border-purple-200/60 shadow-sm flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#ede9fe] text-[#5c4cf4] mb-1.5 uppercase tracking-wide">
-                      Action Required
-                    </span>
-                    <h3 className="text-base font-bold text-gray-900">
-                      You have an assessment pending
-                    </h3>
-                    <p className="text-xs text-gray-600 mt-0.5 font-normal">
-                      {activeCycle?.label || "2026 H2"} Knowledge Assessment is open until{" "}
-                      <span className="font-semibold text-gray-800">
-                        {activeCycle?.deadline || "November 30, 2026"}
-                      </span>
-                      .
-                    </p>
-                  </div>
-                </div>
-
-                <Link
-                  href="/assessment"
-                  className="bg-[#5c4cf4] hover:bg-[#4b3ae3] active:bg-[#402fd0] text-white font-semibold text-xs px-5 py-3 rounded-xl shadow-md shadow-purple-500/25 flex items-center justify-center gap-2 whitespace-nowrap transition-all transform hover:-translate-y-0.5 self-start sm:self-center"
-                >
-                  Start Assessment <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
-            ) : (
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-[22px] p-6 shadow-sm flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 mb-1">
-                      Cycle Completed
-                    </span>
-                    <h3 className="text-base font-bold text-gray-900">
-                      {activeCycle?.label || "2026 H2"} Assessment Submitted
-                    </h3>
-                    <p className="text-xs text-gray-600 mt-0.5">
-                      Your score: <span className="font-bold text-emerald-700">{currentAttempt?.score ?? 9} / 10</span>. Certificate has been recorded.
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href="/assessment"
-                  className="text-xs font-semibold text-[#5c4cf4] hover:underline"
-                >
-                  View Summary
-                </Link>
-              </div>
-            )}
-
-            {/* Bottom Card: Certificate History */}
-            <div className="bg-white rounded-[24px] border border-gray-100 shadow-[0_4px_25px_-5px_rgba(0,0,0,0.03)] p-6 sm:p-7">
-              {/* Card Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-gray-100">
-                <div>
-                  <h3 className="text-base font-bold text-gray-900">Certificate History</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Verified evaluation transcripts and completion credentials
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="bg-gray-50 border border-gray-200/60 px-3 py-1.5 rounded-xl text-[11px] font-bold text-gray-700">
-                    AVG. RATING <span className="text-gray-900 ml-1">9.25 / 10</span>
-                  </div>
-                  <div className="bg-gray-50 border border-gray-200/60 px-3 py-1.5 rounded-xl text-[11px] font-bold text-gray-700">
-                    TOTAL PASSED <span className="text-gray-900 ml-1">4</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Certificate Rows */}
-              <div className="mt-5 space-y-3">
-                {defaultCertificates.map((cert) => (
-                  <div
-                    key={cert.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-purple-200/70 hover:bg-purple-50/20 transition gap-4"
-                  >
-                    <div className="flex items-start gap-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#5c4cf4] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Award className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-xs font-bold text-gray-800">{cert.title}</h4>
-                          {cert.badgeType === "top" ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ede9fe] text-[#5c4cf4]">
-                              {cert.badge}
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600">
-                              {cert.badge}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1.5">
-                          <Calendar className="w-3 h-3 text-gray-300" />
-                          Completed: {cert.completedDate}
-                          <span className="text-gray-300">·</span>
-                          ID: {cert.idCode}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 self-end sm:self-center">
-                      <div className="bg-purple-50/80 text-[#5c4cf4] px-2.5 py-1 rounded-lg text-xs font-bold">
-                        Score: {cert.score}
-                      </div>
-                      <button
-                        onClick={() => alert(`Certificate ${cert.idCode} verified. PDF download started.`)}
-                        className="text-xs font-semibold text-gray-600 hover:text-[#5c4cf4] flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-purple-50 transition"
-                      >
-                        <Download className="w-3.5 h-3.5" /> Download
-                      </button>
-                    </div>
-                  </div>
+              <Divider sx={{ my: 3 }} />
+              <Stack spacing={2.5}>
+                {[
+                  ["EMAIL", user?.email],
+                  ["EMPLOYEE ID", user?.employeeIdCode],
+                  ["DEPARTMENT", user?.department],
+                ].map(([label, value]) => (
+                  <Box key={label}>
+                    <Typography sx={{ fontSize: 11, color: colors.muted, fontWeight: 800, letterSpacing: ".07em" }}>{label}</Typography>
+                    <Typography sx={{ mt: 0.45, fontSize: 13, color: colors.ink, fontWeight: label === "EMAIL" ? 500 : 600, overflowWrap: "anywhere" }}>{value}</Typography>
+                  </Box>
                 ))}
-              </div>
+                <Box>
+                  <Typography sx={{ fontSize: 11, color: colors.muted, fontWeight: 800, letterSpacing: ".07em" }}>DATE JOINED</Typography>
+                  <Stack direction="row" spacing={0.5} sx={{ mt: 0.35, alignItems: "center" }}>
+                    <CalendarToday sx={{ fontSize: 12, color: colors.muted }} />
+                    <Typography sx={{ fontSize: 13, fontWeight: 500 }}>
+                      {user?.joinedDate ? new Date(user.joinedDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "March 15, 2021"}
+                    </Typography>
+                  </Stack>
+                </Box>
+              </Stack>
 
-              {/* Card Footer */}
-              <div className="mt-6 pt-4 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-gray-400 gap-2">
-                <span className="flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-gray-400" />
-                  Certificates signed cryptographically by SEBSA Evaluation Authority.
-                </span>
-                <a
-                  href="#"
-                  onClick={(e) => { e.preventDefault(); alert("Exporting all records to CSV..."); }}
-                  className="font-medium text-[#5c4cf4] hover:underline flex items-center gap-1"
-                >
-                  Export All Records (.CSV) <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<EditOutlined sx={{ fontSize: 14 }} />}
+                onClick={() => window.alert("Profile edits are managed by SEBSA HR directory.")}
+                sx={{ mt: 3.25, height: 44, borderColor: colors.primary, color: colors.primary, fontSize: 13, borderRadius: 1.5 }}
+              >
+                Edit Profile
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Stack spacing={2.25} sx={{ flex: 1, minWidth: 0 }}>
+            <Paper
+              sx={{
+                p: { xs: 2, sm: 2.75 },
+                borderRadius: 2.5,
+                border: `1px solid #D7C8FF`,
+                bgcolor: "#F4EEFF",
+                display: "flex",
+                flexDirection: { xs: "column", sm: "row" },
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 2,
+              }}
+            >
+              {pendingAssessment ? (
+                <>
+                  <Stack direction="row" spacing={1.5} sx={{ width: "100%", alignItems: "center", minWidth: 0 }}>
+                    <Box sx={{ width: 32, height: 32, borderRadius: 1, bgcolor: "#fff", border: `1px solid #DED2FF`, display: "grid", placeItems: "center", color: colors.primary, flexShrink: 0 }}>
+                      <FilePresentOutlined sx={{ fontSize: 18 }} />
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ display: "inline-block", px: 1, py: 0.3, borderRadius: 0.75, bgcolor: "#E4D9FF", color: colors.primary, fontSize: 11, fontWeight: 700 }}>Action Required</Typography>
+                      <Typography sx={{ mt: 0.35, fontSize: { xs: 15, sm: 17 }, fontWeight: 700 }}>You have an assessment pending</Typography>
+                      <Typography sx={{ fontSize: { xs: 12, sm: 13 }, color: "#595263" }}>
+                        {activeCycle?.label || "2026 H2"} Knowledge Assessment is open until {activeCycle?.deadline || "November 30, 2026"}.
+                      </Typography>
+                    </Box>
+                  </Stack>
+                  <Button component={Link} href="/assessment" variant="contained" endIcon={<ArrowForward />} sx={{ whiteSpace: "nowrap", flexShrink: 0, px: 2.25, py: 1.1, fontSize: 13, alignSelf: { xs: "stretch", sm: "center" }, width: { xs: "100%", sm: "auto" } }}>
+                    Start Assessment
+                  </Button>
+                </>
+              ) : (
+                <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+                  <CheckCircleOutlined color="success" />
+                  <Box>
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 700 }}>{activeCycle?.label || "2026 H2"} Assessment Submitted</Typography>
+                    <Typography sx={{ fontSize: 10.5, color: "text.secondary" }}>Your score: <b>{currentAttempt?.score ?? 9} / 10</b>. Certificate has been recorded.</Typography>
+                  </Box>
+                </Stack>
+              )}
+            </Paper>
+
+            <Card sx={{ borderRadius: 2, overflow: "hidden" }}>
+              <Box sx={{ px: { xs: 2, sm: 2.75 }, py: { xs: 2, sm: 2.25 }, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+                <Box>
+                  <Typography sx={{ fontSize: { xs: 19, sm: 21 }, fontWeight: 700 }}>Certificate History</Typography>
+                  <Typography sx={{ mt: 0.35, fontSize: { xs: 13, sm: 14 }, color: colors.muted }}>Verified evaluation transcripts and completion credentials</Typography>
+                </Box>
+                <Stack direction="row" spacing={1}>
+                  <Stat label="AVG. RATING" value="9.25 / 10" />
+                  <Stat label="TOTAL PASSED" value="4" />
+                </Stack>
+              </Box>
+              <Divider />
+              <Stack divider={<Divider flexItem />}>
+                {certificates.map((certificate) => (
+                  <CertificateRow key={certificate.id} certificate={certificate} />
+                ))}
+              </Stack>
+                        <Box sx={{ px: { xs: 2, sm: 2.75 }, py: 1.5, bgcolor: "#F8F3FF", display: "flex", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+                <Stack direction="row" spacing={0.6} sx={{ alignItems: "center" }}>
+                  <SecurityOutlined sx={{ fontSize: 14, color: colors.muted }} />
+                  <Typography sx={{ fontSize: { xs: 11, sm: 12 }, color: colors.muted }}>Certificates signed cryptographically by SEBSA Evaluation Authority.</Typography>
+                </Stack>
+                <Button onClick={() => window.alert("Exporting all records to CSV...")} endIcon={<ArrowForward sx={{ fontSize: 14 }} />} sx={{ minWidth: 0, p: 0, fontSize: { xs: 11, sm: 12 }, color: colors.primary }}>
+                  Export All Records (.CSV)
+                </Button>
+              </Box>
+            </Card>
+          </Stack>
+        </Stack>
+      </Container>
+    </Box>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <Box sx={{ px: 1, py: 0.55, bgcolor: "#F7F3FC", border: `1px solid ${colors.line}`, borderRadius: 1 }}>
+      <Typography component="span" sx={{ fontSize: { xs: 10, sm: 11 }, color: colors.muted, fontWeight: 800, letterSpacing: ".04em" }}>{label}</Typography>
+      <Typography component="span" sx={{ ml: 0.65, fontSize: { xs: 11, sm: 12 }, color: colors.ink, fontWeight: 800 }}>{value}</Typography>
+    </Box>
+  );
+}
+
+function CertificateRow({ certificate }: { certificate: CertificateItem }) {
+  return (
+    <Box sx={{ px: { xs: 2, sm: 2.75 }, py: { xs: 1.75, sm: 1.5 }, display: "flex", flexDirection: { xs: "column", sm: "row" }, alignItems: { xs: "stretch", sm: "center" }, justifyContent: "space-between", gap: { xs: 1.25, sm: 2 }, "&:hover": { bgcolor: "#FCFAFF" } }}>
+      <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", minWidth: 0 }}>
+        <Box sx={{ width: 28, height: 28, borderRadius: 1, bgcolor: colors.lavender, color: colors.primary, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <MilitaryTechOutlined sx={{ fontSize: 17 }} />
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+            <Typography sx={{ fontSize: { xs: 14, sm: 15 }, fontWeight: 700 }}>{certificate.title}</Typography>
+            <Typography sx={{ px: 0.75, py: 0.2, borderRadius: 1, bgcolor: certificate.badgeType === "top" ? "#E4D9FF" : "#E1F7F4", color: certificate.badgeType === "top" ? colors.primary : colors.green, fontSize: 11, fontWeight: 700 }}>{certificate.badge}</Typography>
+          </Stack>
+          <Typography sx={{ mt: 0.4, fontSize: { xs: 12, sm: 12.5 }, color: colors.muted }}>
+            <CalendarToday sx={{ fontSize: 12, verticalAlign: "middle", mr: 0.35 }} /> Completed: {certificate.completedDate} <Box component="span" sx={{ mx: 0.6 }}>·</Box> ID: {certificate.idCode}
+          </Typography>
+        </Box>
+      </Stack>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: { xs: "space-between", sm: "flex-end" }, flexShrink: 0 }}>
+        <Typography sx={{ px: 1, py: 0.55, borderRadius: 1, bgcolor: colors.lavender, color: colors.primary, fontSize: { xs: 11, sm: 11.5 }, fontWeight: 800 }}>Score: {certificate.score}</Typography>
+        <Button onClick={() => window.alert(`Certificate ${certificate.idCode} verified. PDF download started.`)} startIcon={<Download sx={{ fontSize: 15 }} />} sx={{ minWidth: 0, p: 0, color: colors.primary, fontSize: { xs: 11, sm: 11.5 } }}>
+          Download
+        </Button>
+      </Stack>
+    </Box>
   );
 }

@@ -2,22 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import {
-  Shield,
-  ArrowRight,
-  ArrowLeft,
-  CheckCircle2,
-  Award,
-  Download,
-  Clock,
-  Target,
-  FileCheck2,
-  Lock,
-  Sparkles,
-  ChevronRight,
-  AlertCircle
-} from "lucide-react";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import LinearProgress from "@mui/material/LinearProgress";
+import CircularProgress from "@mui/material/CircularProgress";
+import Chip from "@mui/material/Chip";
+import Avatar from "@mui/material/Avatar";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import { alpha } from "@mui/material/styles";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import CheckCircleOutlinedIcon from "@mui/icons-material/CheckCircleOutlined";
+import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import DownloadIcon from "@mui/icons-material/Download";
+import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
+import AdjustIcon from "@mui/icons-material/Adjust";
+import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import ErrorOutlinedIcon from "@mui/icons-material/ErrorOutlined";
+import VerifiedIcon from "@mui/icons-material/Verified";
+import CardMembershipIcon from "@mui/icons-material/CardMembership";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
+import StarIcon from "@mui/icons-material/Star";
+import SecurityIcon from "@mui/icons-material/Security";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CancelIcon from "@mui/icons-material/Cancel";
+import { Navbar } from "@/components/Navbar";
+
+const P = "#6343D8";
+const PD = "#5332C7";
 
 interface Option {
   key: "a" | "b" | "c" | "d";
@@ -29,6 +49,15 @@ interface QuestionItem {
   questionText: string;
   category: string;
   options: Option[];
+}
+
+interface PerQuestionResult {
+  questionId: string;
+  questionText: string;
+  options: { key: "a" | "b" | "c" | "d"; text: string }[];
+  userKey: string | null;
+  correctKey: string | null;
+  isCorrect: boolean;
 }
 
 interface CelebrationData {
@@ -44,14 +73,15 @@ interface CelebrationData {
   certificateId: string;
   categories: { name: string; percentage: number }[];
   masteryLevel: string;
+  perQuestion?: PerQuestionResult[];
 }
 
+// ── Page ─────────────────────────────────────────────────────────────────────
 export default function AssessmentPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // User & Assessment Data
   const [user, setUser] = useState<any>(null);
   const [cycle, setCycle] = useState<any>(null);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
@@ -59,15 +89,15 @@ export default function AssessmentPage() {
   const [answers, setAnswers] = useState<Record<string, "a" | "b" | "c" | "d">>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Celebration state
   const [completed, setCompleted] = useState(false);
   const [celebrationData, setCelebrationData] = useState<CelebrationData | null>(null);
   const [showReview, setShowReview] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [unansweredCount, setUnansweredCount] = useState(0);
 
   useEffect(() => {
     async function initAssessment() {
       try {
-        // 1. Get current session
         const authRes = await fetch("/api/auth");
         const authJson = await authRes.json();
         if (!authJson.success || authJson.data.user.role !== "employee") {
@@ -76,7 +106,6 @@ export default function AssessmentPage() {
         }
         setUser(authJson.data.user);
 
-        // 2. Fetch assessment questions
         const assessRes = await fetch("/api/assessment");
         const assessJson = await assessRes.json();
 
@@ -86,7 +115,6 @@ export default function AssessmentPage() {
           return;
         }
 
-        // If already completed in this cycle
         if (assessJson.alreadyCompleted) {
           setCompleted(true);
           const attempt = assessJson.attempt;
@@ -122,466 +150,1271 @@ export default function AssessmentPage() {
         setLoading(false);
       }
     }
-
     initAssessment();
   }, [router]);
 
   const currentQuestion = questions[currentIndex];
   const selectedOption = currentQuestion ? answers[currentQuestion.id] : undefined;
+  const answeredCount = Object.keys(answers).length;
 
   const handleSelectOption = (key: "a" | "b" | "c" | "d") => {
     if (!currentQuestion) return;
-    setAnswers((prev) => ({
-      ...prev,
-      [currentQuestion.id]: key,
-    }));
+    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: key }));
   };
 
   const handleNext = () => {
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
-    }
+    if (currentIndex < questions.length - 1) setCurrentIndex((p) => p + 1);
   };
 
   const handlePrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1);
+    if (currentIndex > 0) setCurrentIndex((p) => p - 1);
+  };
+
+  const handleSubmitClick = () => {
+    const unanswered = questions.filter((q) => !answers[q.id]).length;
+    if (unanswered > 0) {
+      setUnansweredCount(unanswered);
+      setConfirmOpen(true);
+    } else {
+      doSubmit();
     }
   };
 
-  const handleSubmit = async () => {
-    // Validate that all questions are answered
-    const unansweredCount = questions.filter((q) => !answers[q.id]).length;
-    if (unansweredCount > 0) {
-      const confirmSubmit = window.confirm(
-        `You have ${unansweredCount} unanswered questions. Are you sure you want to submit?`
-      );
-      if (!confirmSubmit) return;
-    }
-
+  const doSubmit = async () => {
+    setConfirmOpen(false);
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cycleId: cycle.id,
-          answers,
-          timeTakenFormatted: "14m 32s",
-        }),
+        body: JSON.stringify({ cycleId: cycle.id, answers, timeTakenFormatted: "14m 32s" }),
       });
-
       const json = await res.json();
       setIsSubmitting(false);
-
       if (!json.success) {
-        alert(json.error || "Failed to submit assessment.");
+        setError(json.error || "Failed to submit assessment.");
         return;
       }
-
       setCelebrationData(json.data);
       setCompleted(true);
     } catch {
       setIsSubmitting(false);
-      alert("Submission error. Please check your connection and try again.");
+      setError("Submission error. Please check your connection and try again.");
     }
   };
 
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8f9fd]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-[#5c4cf4] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium text-gray-500">Preparing randomized assessment questions...</p>
-        </div>
-      </div>
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: "#F9F8FF",
+          gap: 2,
+        }}
+      >
+        <CircularProgress size={40} thickness={4} sx={{ color: P }} />
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+          Preparing your randomised assessment…
+        </Typography>
+      </Box>
     );
   }
 
+  // ── Error ──────────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8f9fd] p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-rose-100 shadow-xl text-center">
-          <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-gray-900">Assessment Unavailable</h2>
-          <p className="text-xs text-gray-500 mt-2">{error}</p>
-          <Link
-            href="/dashboard"
-            className="mt-6 inline-block w-full py-3 bg-[#5c4cf4] text-white rounded-xl text-xs font-semibold shadow-md shadow-purple-500/20"
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: "#F9F8FF",
+          p: 3,
+        }}
+      >
+        <Box
+          sx={{
+            width: "100%",
+            maxWidth: 440,
+            bgcolor: "white",
+            borderRadius: "24px",
+            border: "1px solid #FCE8E8",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.08)",
+            p: { xs: 4, sm: 5 },
+            textAlign: "center",
+          }}
+        >
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: "16px",
+              bgcolor: "#FEF2F2",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              mx: "auto",
+              mb: 2.5,
+            }}
+          >
+            <ErrorOutlinedIcon sx={{ color: "#EF4444", fontSize: 28 }} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#292634", mb: 1 }}>
+            Assessment Unavailable
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5 }}>
+            {error}
+          </Typography>
+          <Button
+            fullWidth
+            variant="contained"
+            size="large"
+            onClick={() => router.push("/dashboard")}
+            sx={{
+              background: P,
+              boxShadow: `0 6px 16px ${alpha(P, 0.35)}`,
+              borderRadius: "14px",
+              fontWeight: 700,
+            }}
           >
             Back to Dashboard
-          </Link>
-        </div>
-      </div>
+          </Button>
+        </Box>
+      </Box>
     );
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // VIEW B: QUIZ COMPLETED CELEBRATION (Matching Stitch Image 3 Right)
-  // ───────────────────────────────────────────────────────────────────────────
+  // ── CELEBRATION VIEW ───────────────────────────────────────────────────────
   if (completed && celebrationData) {
+    const cd = celebrationData;
     return (
-      <div className="min-h-screen bg-[#f8f9fd] text-gray-800 flex flex-col">
-        {/* Top Header */}
-        <header className="w-full bg-white border-b border-gray-100 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-            <Link href="/dashboard" className="text-xl font-extrabold text-[#5c4cf4] tracking-tight">
-              SEBSA
-            </Link>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-gray-500 hidden sm:inline">
-                {celebrationData.employeeEmail}
-              </span>
-              <div className="w-8 h-8 rounded-full bg-[#f0edff] text-[#5c4cf4] font-bold text-xs flex items-center justify-center">
-                SW
-              </div>
-            </div>
-          </div>
-        </header>
+      <Box sx={{ minHeight: "100vh", bgcolor: "#F9F8FF", display: "flex", flexDirection: "column" }}>
+        <Navbar userName={cd.employeeName} userEmail={cd.employeeEmail} />
 
-        {/* Celebration Container */}
-        <main className="flex-1 max-w-5xl w-full mx-auto p-6 md:p-10 flex flex-col items-center">
-          {/* Glowing Trophy Medal Header */}
-          <div className="relative mt-2 mb-6 flex items-center justify-center">
-            {/* Ambient Purple Glow */}
-            <div className="absolute w-32 h-32 bg-purple-400/20 rounded-full blur-2xl pointer-events-none" />
-            <div className="w-24 h-24 rounded-full bg-gradient-to-b from-[#f5f3ff] to-[#ebe5ff] border-4 border-white shadow-xl shadow-purple-500/15 flex items-center justify-center relative">
-              <Award className="w-12 h-12 text-[#5c4cf4]" strokeWidth={2} />
-              <div className="absolute -top-1 -right-1 text-amber-400">
-                <Sparkles className="w-5 h-5 fill-amber-400" />
-              </div>
-            </div>
-          </div>
+        <Box
+          component="main"
+          sx={{
+            flex: 1,
+            maxWidth: 1040,
+            width: "100%",
+            mx: "auto",
+            px: { xs: 2, sm: 3, md: 4 },
+            py: { xs: 4, md: 6 },
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+        >
+          {/* Trophy with glow */}
+          <Box sx={{ position: "relative", mb: 3 }}>
+            <Box
+              aria-hidden
+              sx={{
+                position: "absolute",
+                inset: -16,
+                borderRadius: "50%",
+                background: `radial-gradient(circle, ${alpha(P, 0.14)} 0%, transparent 70%)`,
+                pointerEvents: "none",
+              }}
+            />
+            <Box
+              sx={{
+                width: { xs: 80, sm: 96 },
+                height: { xs: 80, sm: 96 },
+                borderRadius: "50%",
+                background: `linear-gradient(145deg, ${alpha(P, 0.08)}, ${alpha(P, 0.2)})`,
+                border: `3px solid ${alpha(P, 0.18)}`,
+                boxShadow: [
+                  `0 12px 40px ${alpha(P, 0.22)}`,
+                  `0 2px 0 ${alpha("#fff", 0.6)} inset`,
+                ].join(", "),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                position: "relative",
+              }}
+            >
+              <EmojiEventsIcon sx={{ fontSize: { xs: 40, sm: 48 }, color: P }} />
+              <AutoAwesomeIcon
+                sx={{
+                  position: "absolute",
+                  top: -2,
+                  right: -2,
+                  fontSize: { xs: 16, sm: 18 },
+                  color: "#F59E0B",
+                }}
+              />
+            </Box>
+          </Box>
 
-          {/* Verification Pill */}
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wider uppercase bg-[#ede9fe] text-[#5c4cf4] mb-3">
-            <CheckCircle2 className="w-3.5 h-3.5" /> Assessment Verified & Recorded
-          </span>
+          {/* Verified pill */}
+          <Chip
+            icon={<VerifiedIcon sx={{ fontSize: "0.85rem !important" }} />}
+            label="Assessment Verified & Recorded"
+            sx={{
+              mb: 2,
+              bgcolor: alpha(P, 0.1),
+              color: P,
+              fontWeight: 700,
+              fontSize: { xs: "0.62rem", sm: "0.68rem" },
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              height: { xs: 28, sm: 30 },
+              "& .MuiChip-icon": { color: P },
+            }}
+          />
 
           {/* Heading */}
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 text-center tracking-tight">
-            Congratulations, {celebrationData.employeeName.split(" ")[0]}!
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-500 text-center max-w-lg mt-1.5 font-normal">
-            You have successfully completed the {celebrationData.cycleLabel} with outstanding marks.
-          </p>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              color: "#292634",
+              textAlign: "center",
+              letterSpacing: "-0.5px",
+              fontSize: { xs: "1.5rem", sm: "2rem", md: "2.2rem" },
+              mb: 0.75,
+            }}
+          >
+            Congratulations, {cd.employeeName.split(" ")[0]}!
+          </Typography>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ textAlign: "center", maxWidth: 480, mb: { xs: 4, md: 5 }, lineHeight: 1.65 }}
+          >
+            You have successfully completed the{" "}
+            <Box component="strong" sx={{ color: "#292634" }}>
+              {cd.cycleLabel}
+            </Box>{" "}
+            with outstanding results.
+          </Typography>
 
-          {/* Two-Column Grid Cards */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-12 gap-6 mt-8">
-            {/* Left Card: Score & Metrics (7 cols) */}
-            <div className="md:col-span-7 bg-white rounded-[24px] border border-gray-100 shadow-[0_10px_30px_-5px_rgba(0,0,0,0.03)] p-7 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">
-                    Overall Score
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-50 text-emerald-600 border border-emerald-200/50">
-                    ★ Passed (Passing Mark: 80%)
-                  </span>
-                </div>
+          {/* Two-column grid */}
+          <Box
+            sx={{
+              width: "100%",
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "7fr 5fr" },
+              gap: { xs: 2, md: 3 },
+            }}
+          >
+            {/* LEFT: Score + metrics */}
+            <Box
+              sx={{
+                bgcolor: "white",
+                borderRadius: "24px",
+                border: `1px solid ${alpha(P, 0.08)}`,
+                boxShadow: `0 8px 32px ${alpha(P, 0.07)}`,
+                p: { xs: 3, sm: 4 },
+                display: "flex",
+                flexDirection: "column",
+                gap: 0,
+              }}
+            >
+              {/* Score header row */}
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+                <Typography
+                  variant="overline"
+                  sx={{ color: "text.secondary", fontSize: "0.62rem", letterSpacing: "0.1em" }}
+                >
+                  Overall Score
+                </Typography>
+                <Chip
+                  icon={<StarIcon sx={{ fontSize: "0.75rem !important" }} />}
+                  label="Passed · Min 80%"
+                  color="success"
+                  size="small"
+                  sx={{
+                    fontSize: { xs: "0.6rem", sm: "0.65rem" },
+                    fontWeight: 700,
+                    "& .MuiChip-icon": { color: "#059669" },
+                  }}
+                />
+              </Box>
 
-                {/* Big Score Display */}
-                <div className="flex items-baseline gap-3 mt-3">
-                  <span className="text-5xl font-black text-[#5c4cf4] tracking-tight">
-                    {celebrationData.score}
-                    <span className="text-2xl text-gray-300 font-bold"> / {celebrationData.total}</span>
-                  </span>
-                  <span className="bg-[#ede9fe] text-[#5c4cf4] text-xs font-bold px-2 py-0.5 rounded-md">
-                    {celebrationData.percentage}%
-                  </span>
-                </div>
+              {/* Big score */}
+              <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, mb: 0.5 }}>
+                <Typography
+                  sx={{
+                    fontSize: { xs: "3.2rem", sm: "4.2rem" },
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    color: P,
+                    letterSpacing: "-2px",
+                  }}
+                >
+                  {cd.score}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: { xs: "1.6rem", sm: "2rem" },
+                    fontWeight: 300,
+                    color: alpha("#292634", 0.2),
+                    letterSpacing: "-1px",
+                  }}
+                >
+                  / {cd.total}
+                </Typography>
+                <Chip
+                  label={`${cd.percentage}%`}
+                  sx={{
+                    bgcolor: alpha(P, 0.1),
+                    color: P,
+                    fontWeight: 800,
+                    fontSize: { xs: "0.78rem", sm: "0.82rem" },
+                    height: 28,
+                    ml: 0.5,
+                  }}
+                />
+              </Box>
 
-                {/* Proficiency Banner */}
-                <div className="mt-4 bg-[#f8f7ff] border border-purple-100/80 rounded-2xl p-3.5 flex items-start gap-3">
-                  <Shield className="w-4 h-4 text-[#5c4cf4] mt-0.5 flex-shrink-0" />
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-800">
-                      Executive Proficiency Achieved
-                    </h4>
-                    <p className="text-[11px] text-gray-500 mt-0.5">
-                      Top 5th percentile among senior business architecture evaluations in Sri Lanka HQ.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3 Metric Columns */}
-              <div className="grid grid-cols-3 gap-2 mt-6 pt-5 border-t border-gray-100 text-left">
-                <div>
-                  <div className="flex items-center gap-1 text-[10px] font-semibold text-gray-400 uppercase">
-                    <Clock className="w-3 h-3" /> Time Taken
-                  </div>
-                  <p className="text-xs font-bold text-gray-800 mt-1">
-                    {celebrationData.timeTakenFormatted}
-                  </p>
-                  <p className="text-[10px] text-gray-400">Limit: 30 mins</p>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-1 text-[10px] font-semibold text-gray-400 uppercase">
-                    <Target className="w-3 h-3" /> Accuracy
-                  </div>
-                  <p className="text-xs font-bold text-gray-800 mt-1">
-                    {celebrationData.score} / {celebrationData.total - celebrationData.score} Correct
-                  </p>
-                  <p className="text-[10px] text-gray-400">{celebrationData.percentage}% ratio</p>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-1 text-[10px] font-semibold text-gray-400 uppercase">
-                    <FileCheck2 className="w-3 h-3" /> Attempts
-                  </div>
-                  <p className="text-xs font-bold text-gray-800 mt-1">Attempt 1 of 1</p>
-                  <p className="text-[10px] text-gray-400">Final valid attempt</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Card: Competency Breakdown (5 cols) */}
-            <div className="md:col-span-5 bg-white rounded-[24px] border border-gray-100 shadow-[0_10px_30px_-5px_rgba(0,0,0,0.03)] p-7 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                  <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">
-                    Competency Breakdown
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-400 uppercase">Score</span>
-                </div>
-
-                {/* Breakdown Bars */}
-                <div className="mt-4 space-y-3.5">
-                  {celebrationData.categories.map((cat, idx) => (
-                    <div key={idx}>
-                      <div className="flex items-center justify-between text-xs font-medium text-gray-700 mb-1">
-                        <span>{cat.name}</span>
-                        <span className="font-bold text-gray-900">{cat.percentage}%</span>
-                      </div>
-                      <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-[#5c4cf4] h-full rounded-full transition-all duration-700"
-                          style={{ width: `${cat.percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Mastery Level Badge */}
-              <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-xs font-medium text-gray-500">Mastery Level</span>
-                <span className="text-xs font-bold text-[#5c4cf4] bg-purple-50 px-3 py-1 rounded-full">
-                  {celebrationData.masteryLevel}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Action Section */}
-          <div className="w-full bg-white rounded-[22px] border border-gray-100 shadow-sm p-6 mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#5c4cf4] flex items-center justify-center flex-shrink-0">
-                <Award className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-gray-900">Official Certification Issued</h4>
-                <p className="text-[11px] text-gray-400">
-                  Credentials are cryptographically signed and verifiable.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 self-end sm:self-center">
-              <button
-                type="button"
-                onClick={() => setShowReview(!showReview)}
-                className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+              {/* Proficiency banner */}
+              <Box
+                sx={{
+                  mt: 2.5,
+                  bgcolor: alpha(P, 0.04),
+                  border: `1px solid ${alpha(P, 0.12)}`,
+                  borderRadius: "16px",
+                  p: { xs: 1.75, sm: 2 },
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 1.5,
+                }}
               >
-                {showReview ? "Hide Responses" : "Review Responses"}
-              </button>
+                <SecurityIcon sx={{ color: P, fontSize: { xs: 18, sm: 20 }, mt: 0.15, flexShrink: 0 }} />
+                <Box>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ color: "#292634", fontSize: { xs: "0.78rem", sm: "0.82rem" }, fontWeight: 700 }}
+                  >
+                    Executive Proficiency Achieved
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+                    Top 5th percentile among senior business architecture evaluations in Sri Lanka HQ.
+                  </Typography>
+                </Box>
+              </Box>
 
-              <a
-                href={`/api/certificates/${celebrationData.certificateId || celebrationData.certificateNumber}`}
-                download={`SEBSA_Certificate_${celebrationData.certificateNumber.substring(0, 8)}.pdf`}
-                className="px-5 py-2.5 rounded-xl bg-[#5c4cf4] hover:bg-[#4d3de2] text-white text-xs font-semibold shadow-md shadow-purple-500/25 flex items-center gap-2 transition"
+              {/* 3 metrics */}
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: { xs: 1, sm: 2 },
+                  mt: 3,
+                  pt: 3,
+                  borderTop: `1px solid ${alpha(P, 0.08)}`,
+                }}
               >
-                <Download className="w-4 h-4" /> View & Download Certificate
-              </a>
-            </div>
-          </div>
-
-          {/* Optional Review Responses Accordion */}
-          {showReview && (
-            <div className="w-full mt-6 bg-white rounded-[22px] border border-gray-100 p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-gray-900 mb-4">Your Answer Responses</h3>
-              <div className="space-y-4">
-                {questions.map((q, idx) => (
-                  <div key={q.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                    <p className="text-xs font-bold text-gray-800">
-                      {idx + 1}. {q.questionText}
-                    </p>
-                    <p className="text-xs text-[#5c4cf4] font-semibold mt-2">
-                      Selected: Option {answers[q.id]?.toUpperCase() || "Not Answered"}
-                    </p>
-                  </div>
+                {[
+                  {
+                    icon: <AccessTimeOutlinedIcon sx={{ fontSize: 13 }} />,
+                    label: "Time Taken",
+                    value: cd.timeTakenFormatted,
+                    sub: "Limit: 30 mins",
+                  },
+                  {
+                    icon: <AdjustIcon sx={{ fontSize: 13 }} />,
+                    label: "Accuracy",
+                    value: `${cd.score} / ${cd.total}`,
+                    sub: `${cd.percentage}% ratio`,
+                  },
+                  {
+                    icon: <AssignmentTurnedInOutlinedIcon sx={{ fontSize: 13 }} />,
+                    label: "Attempts",
+                    value: "Attempt 1",
+                    sub: "Final attempt",
+                  },
+                ].map((m) => (
+                  <Box key={m.label}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                        color: "text.secondary",
+                        mb: 0.75,
+                      }}
+                    >
+                      {m.icon}
+                      <Typography
+                        variant="overline"
+                        sx={{ fontSize: "0.58rem", letterSpacing: "0.07em", lineHeight: 1 }}
+                      >
+                        {m.label}
+                      </Typography>
+                    </Box>
+                    <Typography
+                      sx={{
+                        fontSize: { xs: "0.75rem", sm: "0.82rem" },
+                        fontWeight: 700,
+                        color: "#292634",
+                        mb: 0.3,
+                      }}
+                    >
+                      {m.value}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontSize: "0.62rem" }}
+                    >
+                      {m.sub}
+                    </Typography>
+                  </Box>
                 ))}
-              </div>
-            </div>
+              </Box>
+            </Box>
+
+            {/* RIGHT: Competency breakdown */}
+            <Box
+              sx={{
+                bgcolor: "white",
+                borderRadius: "24px",
+                border: `1px solid ${alpha(P, 0.08)}`,
+                boxShadow: `0 8px 32px ${alpha(P, 0.07)}`,
+                p: { xs: 3, sm: 4 },
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+              }}
+            >
+              <Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    pb: 2,
+                    borderBottom: `1px solid ${alpha(P, 0.08)}`,
+                    mb: 3,
+                  }}
+                >
+                  <Typography
+                    variant="overline"
+                    sx={{ color: "text.secondary", fontSize: "0.62rem", letterSpacing: "0.1em" }}
+                  >
+                    Competency Breakdown
+                  </Typography>
+                  <Typography
+                    variant="overline"
+                    sx={{ color: "text.secondary", fontSize: "0.62rem" }}
+                  >
+                    Score
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+                  {cd.categories.map((cat) => (
+                    <Box key={cat.name}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          mb: 0.75,
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 500, fontSize: { xs: "0.75rem", sm: "0.8rem" }, color: "#292634" }}
+                        >
+                          {cat.name}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 700, fontSize: { xs: "0.75rem", sm: "0.8rem" }, color: P }}
+                        >
+                          {cat.percentage}%
+                        </Typography>
+                      </Box>
+                      <Box
+                        sx={{
+                          width: "100%",
+                          height: 6,
+                          bgcolor: alpha(P, 0.1),
+                          borderRadius: "99px",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            width: `${cat.percentage}%`,
+                            height: "100%",
+                            background: `linear-gradient(90deg, ${PD}, ${P})`,
+                            borderRadius: "99px",
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+
+              {/* Mastery badge */}
+              <Box
+                sx={{
+                  mt: 3,
+                  pt: 2.5,
+                  borderTop: `1px solid ${alpha(P, 0.08)}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ fontWeight: 500, fontSize: { xs: "0.75rem", sm: "0.8rem" } }}
+                >
+                  Mastery Level
+                </Typography>
+                <Chip
+                  label={cd.masteryLevel}
+                  sx={{
+                    bgcolor: alpha(P, 0.1),
+                    color: P,
+                    fontWeight: 700,
+                    fontSize: { xs: "0.68rem", sm: "0.72rem" },
+                    height: 26,
+                  }}
+                />
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Certificate action row */}
+          <Box
+            sx={{
+              width: "100%",
+              mt: { xs: 2, md: 3 },
+              bgcolor: "white",
+              borderRadius: "22px",
+              border: `1px solid ${alpha(P, 0.08)}`,
+              boxShadow: `0 4px 20px ${alpha(P, 0.05)}`,
+              p: { xs: 2.5, sm: 3 },
+              display: "flex",
+              flexDirection: { xs: "column", sm: "row" },
+              alignItems: { xs: "stretch", sm: "center" },
+              justifyContent: "space-between",
+              gap: 2,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Box
+                sx={{
+                  width: { xs: 40, sm: 46 },
+                  height: { xs: 40, sm: 46 },
+                  borderRadius: "14px",
+                  bgcolor: alpha(P, 0.1),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <CardMembershipIcon sx={{ color: P, fontSize: { xs: 20, sm: 22 } }} />
+              </Box>
+              <Box>
+                <Typography
+                  variant="subtitle2"
+                  sx={{ fontWeight: 700, color: "#292634", fontSize: { xs: "0.8rem", sm: "0.85rem" } }}
+                >
+                  Official Certification Issued
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Credentials are cryptographically signed · Ref: {cd.certificateNumber}
+                </Typography>
+              </Box>
+            </Box>
+
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                flexShrink: 0,
+                flexWrap: "wrap",
+              }}
+            >
+              {cd.perQuestion && cd.perQuestion.length > 0 && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={showReview ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
+                  onClick={() => setShowReview((v) => !v)}
+                  sx={{
+                    borderRadius: "10px",
+                    fontSize: { xs: "0.72rem", sm: "0.78rem" },
+                    borderColor: alpha(P, 0.25),
+                    color: P,
+                    "&:hover": { borderColor: alpha(P, 0.4), bgcolor: alpha(P, 0.04) },
+                  }}
+                >
+                  {showReview ? "Hide Review" : "Review Answers"}
+                </Button>
+              )}
+
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<DownloadIcon />}
+                component="a"
+                href={`/api/certificates/${cd.certificateId || cd.certificateNumber}`}
+                download={`SEBSA_Certificate_${cd.certificateNumber.substring(0, 8)}.pdf`}
+                sx={{
+                  borderRadius: "10px",
+                  fontSize: { xs: "0.72rem", sm: "0.78rem" },
+                  background: `linear-gradient(135deg, ${PD}, ${P})`,
+                  boxShadow: `0 4px 14px ${alpha(P, 0.4)}`,
+                  "&:hover": {
+                    background: `linear-gradient(135deg, ${PD}, ${P})`,
+                    boxShadow: `0 6px 18px ${alpha(P, 0.45)}`,
+                  },
+                }}
+              >
+                Download Certificate
+              </Button>
+            </Box>
+          </Box>
+
+          {/* Review accordion */}
+          {showReview && cd.perQuestion && cd.perQuestion.length > 0 && (
+            <Box
+              sx={{
+                width: "100%",
+                mt: 2,
+                bgcolor: "white",
+                borderRadius: "22px",
+                border: `1px solid ${alpha(P, 0.08)}`,
+                p: { xs: 2.5, sm: 3 },
+              }}
+            >
+              {/* Header row with score summary */}
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
+                <Typography
+                  variant="subtitle1"
+                  sx={{ fontWeight: 700, color: "#292634", fontSize: { xs: "0.9rem", sm: "0.96rem" } }}
+                >
+                  Answer Review
+                </Typography>
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <Chip
+                    icon={<CheckCircleIcon sx={{ fontSize: "0.78rem !important" }} />}
+                    label={`${cd.perQuestion.filter((q) => q.isCorrect).length} Correct`}
+                    size="small"
+                    sx={{ bgcolor: "#ECFDF5", color: "#059669", fontWeight: 700, fontSize: "0.65rem", "& .MuiChip-icon": { color: "#059669" } }}
+                  />
+                  <Chip
+                    icon={<CancelIcon sx={{ fontSize: "0.78rem !important" }} />}
+                    label={`${cd.perQuestion.filter((q) => !q.isCorrect).length} Wrong`}
+                    size="small"
+                    sx={{ bgcolor: "#FEF2F2", color: "#DC2626", fontWeight: 700, fontSize: "0.65rem", "& .MuiChip-icon": { color: "#DC2626" } }}
+                  />
+                </Box>
+              </Box>
+
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {cd.perQuestion.map((pq, idx) => (
+                  <Box
+                    key={pq.questionId}
+                    sx={{
+                      borderRadius: "16px",
+                      border: `1px solid ${pq.isCorrect ? alpha("#059669", 0.18) : alpha("#EF4444", 0.18)}`,
+                      bgcolor: pq.isCorrect ? alpha("#059669", 0.03) : alpha("#EF4444", 0.03),
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Question header */}
+                    <Box
+                      sx={{
+                        px: { xs: 2, sm: 2.5 },
+                        py: { xs: 1.5, sm: 1.75 },
+                        borderBottom: `1px solid ${pq.isCorrect ? alpha("#059669", 0.12) : alpha("#EF4444", 0.12)}`,
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 1.5,
+                      }}
+                    >
+                      {/* Q number + result icon */}
+                      <Box
+                        sx={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: "50%",
+                          bgcolor: pq.isCorrect ? "#ECFDF5" : "#FEF2F2",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          mt: 0.1,
+                        }}
+                      >
+                        {pq.isCorrect
+                          ? <CheckCircleIcon sx={{ fontSize: 14, color: "#059669" }} />
+                          : <CancelIcon sx={{ fontSize: 14, color: "#DC2626" }} />
+                        }
+                      </Box>
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 600, color: "#292634", fontSize: { xs: "0.8rem", sm: "0.84rem" }, lineHeight: 1.5 }}
+                      >
+                        <Box component="span" sx={{ color: "text.secondary", fontWeight: 500, mr: 0.75 }}>
+                          Q{idx + 1}.
+                        </Box>
+                        {pq.questionText}
+                      </Typography>
+                    </Box>
+
+                    {/* Options */}
+                    <Box sx={{ px: { xs: 2, sm: 2.5 }, py: { xs: 1.25, sm: 1.5 }, display: "flex", flexDirection: "column", gap: 0.75 }}>
+                      {pq.options.map((opt) => {
+                        const isUserPick = opt.key === pq.userKey;
+                        const isCorrectOpt = opt.key === pq.correctKey;
+                        const isWrongPick = isUserPick && !pq.isCorrect;
+
+                        let bgColor = "transparent";
+                        let borderColor = alpha("#292634", 0.08);
+                        let labelColor = "text.secondary";
+                        let textColor = "#4B4B5A";
+                        let fontWeight = 400;
+
+                        if (isCorrectOpt) {
+                          bgColor = "#ECFDF5";
+                          borderColor = "#A7F3D0";
+                          labelColor = "#059669";
+                          textColor = "#065F46";
+                          fontWeight = 600;
+                        }
+                        if (isWrongPick) {
+                          bgColor = "#FEF2F2";
+                          borderColor = "#FECACA";
+                          labelColor = "#DC2626";
+                          textColor = "#991B1B";
+                          fontWeight = 600;
+                        }
+
+                        return (
+                          <Box
+                            key={opt.key}
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1.25,
+                              px: 1.5,
+                              py: 0.9,
+                              borderRadius: "10px",
+                              bgcolor: bgColor,
+                              border: `1px solid ${borderColor}`,
+                            }}
+                          >
+                            {/* Letter badge */}
+                            <Typography
+                              sx={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: "6px",
+                                bgcolor: isCorrectOpt
+                                  ? "#A7F3D0"
+                                  : isWrongPick
+                                  ? "#FECACA"
+                                  : alpha("#292634", 0.07),
+                                color: labelColor,
+                                fontSize: "0.65rem",
+                                fontWeight: 800,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                                letterSpacing: 0,
+                              }}
+                            >
+                              {opt.key.toUpperCase()}
+                            </Typography>
+
+                            <Typography
+                              sx={{
+                                flex: 1,
+                                fontSize: { xs: "0.78rem", sm: "0.82rem" },
+                                fontWeight,
+                                color: textColor,
+                                lineHeight: 1.45,
+                              }}
+                            >
+                              {opt.text}
+                            </Typography>
+
+                            {/* Trailing badge */}
+                            {isCorrectOpt && (
+                              <Typography
+                                sx={{
+                                  fontSize: "0.6rem",
+                                  fontWeight: 700,
+                                  color: "#059669",
+                                  bgcolor: "#A7F3D0",
+                                  px: 0.75,
+                                  py: 0.25,
+                                  borderRadius: "6px",
+                                  flexShrink: 0,
+                                  letterSpacing: "0.02em",
+                                }}
+                              >
+                                {isUserPick ? "✓ Your answer · Correct" : "✓ Correct answer"}
+                              </Typography>
+                            )}
+                            {isWrongPick && (
+                              <Typography
+                                sx={{
+                                  fontSize: "0.6rem",
+                                  fontWeight: 700,
+                                  color: "#DC2626",
+                                  bgcolor: "#FECACA",
+                                  px: 0.75,
+                                  py: 0.25,
+                                  borderRadius: "6px",
+                                  flexShrink: 0,
+                                  letterSpacing: "0.02em",
+                                }}
+                              >
+                                ✗ Your answer
+                              </Typography>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
           )}
 
-          {/* Footer Metadata */}
-          <div className="w-full mt-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-gray-400 px-2 gap-2">
-            <span>Recipient: {celebrationData.employeeName}</span>
-            <span>Account: {celebrationData.employeeEmail}</span>
-            <Link href="/dashboard" className="text-[#5c4cf4] font-medium hover:underline">
+          {/* Footer metadata */}
+          <Box
+            sx={{
+              width: "100%",
+              mt: 3,
+              display: "flex",
+              flexDirection: { xs: "column", sm: "row" },
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 1,
+              px: 0.5,
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              Recipient: {cd.employeeName}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Account: {cd.employeeEmail}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: P,
+                fontWeight: 600,
+                cursor: "pointer",
+                "&:hover": { textDecoration: "underline" },
+              }}
+              onClick={() => router.push("/dashboard")}
+            >
               Return to Dashboard →
-            </Link>
-          </div>
-        </main>
-      </div>
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
     );
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // VIEW A: ACTIVE ASSESSMENT (Matching Stitch Image 3 Left)
-  // ───────────────────────────────────────────────────────────────────────────
+  // ── QUIZ VIEW ──────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#f8f9fd] text-gray-800 flex flex-col">
-      {/* Top Header */}
-      <header className="w-full bg-white border-b border-gray-100 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/dashboard" className="text-xl font-extrabold text-[#5c4cf4] tracking-tight">
-            SEBSA
-          </Link>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-500 hidden sm:inline">
-              {user?.email}
-            </span>
-            <div className="w-8 h-8 rounded-full bg-[#f0edff] text-[#5c4cf4] font-bold text-xs flex items-center justify-center">
-              SW
-            </div>
-          </div>
-        </div>
-      </header>
+    <Box sx={{ minHeight: "100vh", bgcolor: "#F9F8FF", display: "flex", flexDirection: "column" }}>
+      <Navbar userName={user?.fullName} userEmail={user?.email} />
 
-      {/* Assessment Container */}
-      <main className="flex-1 max-w-3xl w-full mx-auto p-6 md:p-8 flex flex-col justify-center">
-        {/* Sub-Header: Cycle Label + Step Counter */}
-        <div className="flex items-center justify-between text-xs font-bold text-gray-500 mb-2">
-          <span className="tracking-wider text-gray-400 uppercase text-[11px]">
-            {cycle?.label || "2026 H2 KNOWLEDGE ASSESSMENT"}
-          </span>
-          <span className="text-[#5c4cf4]">
+      {/* Unanswered confirm dialog */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: { xs: "1rem", sm: "1.1rem" } }}>
+          Submit with unanswered questions?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            You have{" "}
+            <Box component="strong" sx={{ color: "#292634" }}>
+              {unansweredCount}
+            </Box>{" "}
+            unanswered question{unansweredCount !== 1 ? "s" : ""}. Unanswered questions will be marked incorrect.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)} sx={{ color: "text.secondary", fontWeight: 600 }}>
+            Keep Answering
+          </Button>
+          <Button
+            variant="contained"
+            onClick={doSubmit}
+            sx={{
+              background: `linear-gradient(135deg, ${PD}, ${P})`,
+              boxShadow: `0 4px 12px ${alpha(P, 0.35)}`,
+              fontWeight: 700,
+            }}
+          >
+            Submit Anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Box
+        component="main"
+        sx={{
+          flex: 1,
+          maxWidth: 720,
+          width: "100%",
+          mx: "auto",
+          px: { xs: 2, sm: 3 },
+          py: { xs: 3, md: 4 },
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Back button */}
+        <Box sx={{ mb: { xs: 2, sm: 2.5 } }}>
+          <Button
+            startIcon={<ArrowBackIcon sx={{ fontSize: "0.95rem !important" }} />}
+            onClick={() => router.push("/dashboard")}
+            sx={{
+              color: "text.secondary",
+              fontWeight: 600,
+              fontSize: { xs: "0.78rem", sm: "0.82rem" },
+              px: 0,
+              py: 0.5,
+              minWidth: 0,
+              "&:hover": { color: P, bgcolor: "transparent" },
+            }}
+          >
+            Back to Dashboard
+          </Button>
+        </Box>
+
+        {/* Sub-header */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            mb: 1.25,
+          }}
+        >
+          <Typography
+            variant="overline"
+            sx={{
+              color: "text.secondary",
+              fontSize: { xs: "0.58rem", sm: "0.62rem" },
+              letterSpacing: "0.1em",
+            }}
+          >
+            {cycle?.label || "2026 H2 Knowledge Assessment"}
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{ color: P, fontWeight: 700, fontSize: { xs: "0.74rem", sm: "0.8rem" } }}
+          >
             Question {currentIndex + 1} of {questions.length}
-          </span>
-        </div>
+          </Typography>
+        </Box>
 
-        {/* Progress Bar */}
-        <div className="w-full bg-gray-200/60 h-1.5 rounded-full overflow-hidden mb-6">
-          <div
-            className="bg-[#5c4cf4] h-full rounded-full transition-all duration-300"
-            style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
-          />
-        </div>
+        {/* Progress bar */}
+        <LinearProgress
+          variant="determinate"
+          value={((currentIndex + 1) / Math.max(questions.length, 1)) * 100}
+          sx={{ mb: { xs: 3, sm: 3.5 }, borderRadius: "4px", height: 5 }}
+        />
 
-        {/* Question Card */}
-        {currentQuestion ? (
-          <div className="bg-white rounded-[26px] border border-purple-100/80 shadow-[0_10px_35px_-10px_rgba(92,76,244,0.06)] p-7 sm:p-9 relative">
-            {/* Category Tag */}
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 mb-4 bg-gray-50 px-3 py-1 rounded-lg">
-              <span>📁 {currentQuestion.category}</span>
-            </div>
+        {/* Question card */}
+        {currentQuestion && (
+          <Box
+            sx={{
+              bgcolor: "white",
+              borderRadius: { xs: "20px", sm: "24px" },
+              border: `1px solid ${alpha(P, 0.1)}`,
+              boxShadow: [
+                `0 12px 40px ${alpha(P, 0.08)}`,
+                "0 2px 8px rgba(0,0,0,0.04)",
+              ].join(", "),
+              p: { xs: 3, sm: 4, md: 5 },
+            }}
+          >
+            {/* Category chip */}
+            <Chip
+              icon={<FolderOutlinedIcon sx={{ fontSize: "0.82rem !important" }} />}
+              label={currentQuestion.category}
+              size="small"
+              sx={{
+                mb: { xs: 2, sm: 2.5 },
+                bgcolor: alpha(P, 0.07),
+                color: P,
+                fontWeight: 600,
+                fontSize: { xs: "0.68rem", sm: "0.72rem" },
+                height: 28,
+                "& .MuiChip-icon": { color: P },
+              }}
+            />
 
-            {/* Question Text */}
-            <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-relaxed mb-6">
+            {/* Question text */}
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 700,
+                color: "#292634",
+                lineHeight: 1.55,
+                mb: { xs: 2.5, sm: 3.5 },
+                fontSize: { xs: "0.98rem", sm: "1.08rem", md: "1.18rem" },
+              }}
+            >
               {currentQuestion.questionText}
-            </h2>
+            </Typography>
 
-            {/* 4 Option Cards */}
-            <div className="space-y-3">
+            {/* Options */}
+            <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: 1.25, sm: 1.5 } }}>
               {currentQuestion.options.map((option) => {
                 const isSelected = selectedOption === option.key;
                 return (
-                  <button
+                  <Box
                     key={option.key}
-                    type="button"
                     onClick={() => handleSelectOption(option.key)}
-                    className={`w-full text-left p-4 rounded-2xl border transition-all relative flex flex-col gap-1 ${
-                      isSelected
-                        ? "border-2 border-[#5c4cf4] bg-[#f4f2ff] shadow-sm text-gray-900"
-                        : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50/20 text-gray-700"
-                    }`}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") handleSelectOption(option.key);
+                    }}
+                    sx={{
+                      cursor: "pointer",
+                      borderRadius: { xs: "14px", sm: "16px" },
+                      border: isSelected
+                        ? `2px solid ${P}`
+                        : `1.5px solid ${alpha("#292634", 0.1)}`,
+                      bgcolor: isSelected ? alpha(P, 0.05) : "white",
+                      p: { xs: "13px 15px", sm: "15px 20px" },
+                      transition: "all 0.12s ease",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: { xs: 1.5, sm: 2 },
+                      "&:hover": {
+                        border: isSelected
+                          ? `2px solid ${P}`
+                          : `1.5px solid ${alpha(P, 0.35)}`,
+                        bgcolor: isSelected ? alpha(P, 0.05) : alpha(P, 0.02),
+                      },
+                      "&:focus-visible": {
+                        outline: `2px solid ${P}`,
+                        outlineOffset: 2,
+                      },
+                    }}
                   >
-                    <div className="flex items-center justify-between">
-                      <span
-                        className={`text-[10px] font-extrabold uppercase tracking-wider ${
-                          isSelected ? "text-[#5c4cf4]" : "text-gray-400"
-                        }`}
+                    {/* Radio dot */}
+                    <Box
+                      sx={{
+                        width: { xs: 18, sm: 20 },
+                        height: { xs: 18, sm: 20 },
+                        borderRadius: "50%",
+                        border: isSelected ? `2px solid ${P}` : "2px solid #D1D5DB",
+                        bgcolor: isSelected ? P : "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        transition: "all 0.12s ease",
+                      }}
+                    >
+                      {isSelected && (
+                        <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "white" }} />
+                      )}
+                    </Box>
+
+                    {/* Option content */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography
+                        sx={{
+                          fontSize: { xs: "0.6rem", sm: "0.65rem" },
+                          fontWeight: 700,
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase",
+                          color: isSelected ? P : "text.secondary",
+                          mb: 0.3,
+                          lineHeight: 1,
+                        }}
                       >
                         Option {option.key.toUpperCase()}
-                        {isSelected ? " — Current Selection" : ""}
-                      </span>
-
-                      {/* Radio Circle */}
-                      <div
-                        className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          isSelected
-                            ? "border-[#5c4cf4] bg-[#5c4cf4] text-white"
-                            : "border-gray-300 bg-white"
-                        }`}
+                        {isSelected && " · Selected"}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: { xs: "0.84rem", sm: "0.9rem" },
+                          fontWeight: isSelected ? 600 : 400,
+                          color: isSelected ? "#292634" : "#4B4B5A",
+                          lineHeight: 1.5,
+                        }}
                       >
-                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                    </div>
-
-                    <p className="text-xs sm:text-sm font-medium leading-normal mt-0.5">
-                      {option.text}
-                    </p>
-                  </button>
+                        {option.text}
+                      </Typography>
+                    </Box>
+                  </Box>
                 );
               })}
-            </div>
+            </Box>
 
-            {/* Bottom Actions */}
-            <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-between">
-              <button
-                type="button"
+            {/* Navigation */}
+            <Box
+              sx={{
+                mt: { xs: 3, sm: 4 },
+                pt: { xs: 2.5, sm: 3 },
+                borderTop: `1px solid ${alpha(P, 0.08)}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <Button
+                startIcon={<ArrowBackIcon sx={{ fontSize: { xs: "1rem !important", sm: "1.1rem !important" } }} />}
                 onClick={handlePrevious}
                 disabled={currentIndex === 0}
-                className="text-xs font-semibold text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1.5 px-4 py-2 rounded-xl hover:bg-gray-50 transition"
+                sx={{
+                  color: currentIndex === 0 ? alpha("#292634", 0.25) : "text.primary",
+                  fontWeight: 600,
+                  fontSize: { xs: "0.78rem", sm: "0.85rem" },
+                  px: { xs: 1.5, sm: 2 },
+                  py: 1,
+                  borderRadius: "10px",
+                  "&:hover": { bgcolor: currentIndex === 0 ? "transparent" : alpha(P, 0.06) },
+                }}
               >
-                <ArrowLeft className="w-4 h-4" /> Previous Question
-              </button>
+                Previous
+              </Button>
+
+              {/* Dot progress (hidden on xs) */}
+              <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 0.6 }}>
+                {questions.map((q, i) => (
+                  <Box
+                    key={i}
+                    onClick={() => setCurrentIndex(i)}
+                    sx={{
+                      width: i === currentIndex ? 22 : answers[q.id] ? 8 : 6,
+                      height: 6,
+                      borderRadius: "99px",
+                      bgcolor:
+                        i === currentIndex
+                          ? P
+                          : answers[q.id]
+                          ? alpha(P, 0.45)
+                          : alpha("#292634", 0.12),
+                      cursor: "pointer",
+                      transition: "all 0.18s ease",
+                    }}
+                  />
+                ))}
+              </Box>
 
               {currentIndex === questions.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={handleSubmit}
+                <Button
+                  variant="contained"
+                  endIcon={
+                    isSubmitting ? undefined : (
+                      <CheckCircleOutlinedIcon sx={{ fontSize: { xs: "1rem !important", sm: "1.1rem !important" } }} />
+                    )
+                  }
+                  onClick={handleSubmitClick}
                   disabled={isSubmitting}
-                  className="bg-[#5c4cf4] hover:bg-[#4c3be6] text-white text-xs font-semibold px-6 py-3 rounded-xl shadow-md shadow-purple-500/25 flex items-center gap-2 transition disabled:opacity-50"
+                  sx={{
+                    background: `linear-gradient(135deg, ${PD}, ${P})`,
+                    boxShadow: `0 6px 18px ${alpha(P, 0.4)}`,
+                    borderRadius: "12px",
+                    fontWeight: 700,
+                    fontSize: { xs: "0.78rem", sm: "0.85rem" },
+                    px: { xs: 2.5, sm: 3 },
+                    py: { xs: 1, sm: 1.25 },
+                    "&:hover": {
+                      background: `linear-gradient(135deg, ${PD}, ${P})`,
+                      boxShadow: `0 8px 22px ${alpha(P, 0.48)}`,
+                    },
+                    "&.Mui-disabled": { background: alpha("#9CA3AF", 0.35), color: "#fff", boxShadow: "none" },
+                  }}
                 >
-                  {isSubmitting ? "Scoring & Generating Certificate..." : "Submit Assessment"}
-                  <CheckCircle2 className="w-4 h-4" />
-                </button>
+                  {isSubmitting ? (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <CircularProgress size={14} color="inherit" />
+                      Submitting…
+                    </Box>
+                  ) : (
+                    "Submit Assessment"
+                  )}
+                </Button>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="contained"
+                  endIcon={<ArrowForwardIcon sx={{ fontSize: { xs: "1rem !important", sm: "1.1rem !important" } }} />}
                   onClick={handleNext}
-                  className="bg-[#5c4cf4] hover:bg-[#4c3be6] text-white text-xs font-semibold px-6 py-3 rounded-xl shadow-md shadow-purple-500/25 flex items-center gap-2 transition"
+                  sx={{
+                    background: `linear-gradient(135deg, ${PD}, ${P})`,
+                    boxShadow: `0 6px 18px ${alpha(P, 0.4)}`,
+                    borderRadius: "12px",
+                    fontWeight: 700,
+                    fontSize: { xs: "0.78rem", sm: "0.85rem" },
+                    px: { xs: 2.5, sm: 3 },
+                    py: { xs: 1, sm: 1.25 },
+                    "&:hover": {
+                      background: `linear-gradient(135deg, ${PD}, ${P})`,
+                      boxShadow: `0 8px 22px ${alpha(P, 0.48)}`,
+                    },
+                  }}
                 >
-                  Next Question <ArrowRight className="w-4 h-4" />
-                </button>
+                  Next
+                </Button>
               )}
-            </div>
+            </Box>
 
-            {/* Auto-save info */}
-            <div className="mt-4 text-center">
-              <span className="text-[11px] text-gray-400 font-medium inline-flex items-center gap-1">
-                <Lock className="w-3 h-3 text-gray-300" /> Answers are saved automatically as you progress
-              </span>
-            </div>
-          </div>
-        ) : null}
-      </main>
-    </div>
+            {/* Auto-save note */}
+            <Box sx={{ mt: 2, textAlign: "center" }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 0.5,
+                  fontSize: { xs: "0.64rem", sm: "0.68rem" },
+                }}
+              >
+                <LockOutlinedIcon sx={{ fontSize: 11, opacity: 0.45 }} />
+                Answers are saved automatically as you progress
+              </Typography>
+            </Box>
+          </Box>
+        )}
+
+        {/* Answered count pill */}
+        <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: P,
+              fontWeight: 600,
+              fontSize: { xs: "0.68rem", sm: "0.72rem" },
+              bgcolor: alpha(P, 0.07),
+              px: 2,
+              py: 0.6,
+              borderRadius: "99px",
+            }}
+          >
+            {answeredCount} of {questions.length} answered
+          </Typography>
+        </Box>
+      </Box>
+    </Box>
   );
 }
