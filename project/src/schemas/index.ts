@@ -1,0 +1,55 @@
+import { z } from "zod";
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+export const loginSchema = z.object({
+  email:    z.string().email("Please enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+export type LoginInput = z.infer<typeof loginSchema>;
+
+// ─── Questions ────────────────────────────────────────────────────────────────
+export const questionSchema = z.object({
+  questionText:  z.string().min(5, "Question text must be at least 5 characters"),
+  optionA:       z.string().min(1, "Option A is required"),
+  optionB:       z.string().min(1, "Option B is required"),
+  optionC:       z.string().min(1, "Option C is required"),
+  optionD:       z.string().min(1, "Option D is required"),
+  correctOption: z.enum(["a", "b", "c", "d"], { message: "Correct option must be a, b, c, or d" }),
+  category:      z.string().optional(),
+  status:        z.enum(["active", "inactive"]).default("active"),
+});
+export type QuestionInput = z.infer<typeof questionSchema>;
+
+// ─── Employees ────────────────────────────────────────────────────────────────
+export const employeeSchema = z.object({
+  fullName:   z.string().min(2, "Full name must be at least 2 characters"),
+  email:      z.string().email("Please enter a valid email address"),
+  department: z.string().optional(),
+  password:   z.string().min(8, "Password must be at least 8 characters"),
+  status:     z.enum(["active", "inactive"]).default("active"),
+});
+export type EmployeeInput = z.infer<typeof employeeSchema>;
+
+export const updateEmployeeSchema = employeeSchema.partial().omit({ password: true }).extend({
+  password: z.string().min(8).optional(), // password is optional on update
+});
+export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
+
+// ─── Assessment Cycles ────────────────────────────────────────────────────────
+export const createCycleSchema = z.object({
+  label: z.string().min(3, "Cycle label must be at least 3 characters"), // e.g. "2026 H2"
+});
+export type CreateCycleInput = z.infer<typeof createCycleSchema>;
+
+// ─── Assessment Submission ────────────────────────────────────────────────────
+export const submitAssessmentSchema = z.object({
+  cycleId: z.string().min(1, "Cycle ID is required"),
+  answers: z.record(
+    z.string(), // question id (as string key in JSON)
+    z.enum(["a", "b", "c", "d"])
+  ).refine(
+    (answers) => Object.keys(answers).length === 10,
+    { message: "All 10 questions must be answered before submitting" }
+  ),
+});
+export type SubmitAssessmentInput = z.infer<typeof submitAssessmentSchema>;
