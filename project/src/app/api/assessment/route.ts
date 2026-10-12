@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
       id: q._id.toString(),
       questionText: q.questionText,
       category: q.category || "Supply Chain Systems Architecture",
-      options: shuffle(rawOptions),
+      options: rawOptions,
     };
   });
 

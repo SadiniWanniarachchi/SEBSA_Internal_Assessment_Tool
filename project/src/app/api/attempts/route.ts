@@ -120,6 +120,26 @@ export async function POST(req: NextRequest) {
     const percentage = Math.round((score / selectedQuestions.length) * 100);
     const passed = percentage >= 80;
 
+    // Build per-question review breakdown (correct answer revealed after submission)
+    const perQuestion = questionIds.map((qId) => {
+      const q = selectedQuestionsDB.find((q) => q._id.toString() === qId);
+      const userKey = (answers as Record<string, string>)[qId] || null;
+      const correctKey = q?.correctOption ?? null;
+      return {
+        questionId:   qId,
+        questionText: q?.questionText ?? "",
+        options: [
+          { key: "a" as const, text: q?.optionA ?? "" },
+          { key: "b" as const, text: q?.optionB ?? "" },
+          { key: "c" as const, text: q?.optionC ?? "" },
+          { key: "d" as const, text: q?.optionD ?? "" },
+        ],
+        userKey,
+        correctKey,
+        isCorrect: userKey !== null && userKey === correctKey,
+      };
+    });
+
     return NextResponse.json({
       success: true,
       data: {
@@ -141,6 +161,7 @@ export async function POST(req: NextRequest) {
           { name: "System Integration", percentage: Math.min(100, Math.max(65, percentage - 10)) },
         ],
         masteryLevel: score >= 9 ? "Distinction" : score >= 8 ? "Merit" : "Pass",
+        perQuestion,
       },
     });
   }

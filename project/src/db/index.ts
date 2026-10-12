@@ -1,10 +1,13 @@
 import mongoose from "mongoose";
 import dns from "node:dns";
 
+// Force IPv4 DNS resolution and use public DNS for MongoDB SRV records on Windows.
 try {
-  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+  dns.setDefaultResultOrder("ipv4first");
+  dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
+  dns.promises.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
 } catch {
-  // Ignore in environments where setting DNS servers is restricted
+  // Ignore in environments where DNS configuration is restricted.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
