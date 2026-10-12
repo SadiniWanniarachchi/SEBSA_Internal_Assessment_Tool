@@ -43,22 +43,75 @@ async function seed() {
       console.log(`ℹ️ Admin ${adminEmail} already exists.`);
     }
 
-    // ── Create default Employee ─────────────────────────────────────────────
-    const empEmail = "employee@sebsaworld.com";
-    const existingEmp = await Employee.findOne({ email: empEmail });
-
-    if (!existingEmp) {
-      const empPassword = await hashPassword("emp123");
-      await Employee.create({
+    // ── Create default Employees ───────────────────────────────────────────
+    const employeesToSeed = [
+      {
+        fullName: "Sadini Wanniarachchi",
+        email: "sadini.wanniarachchi@sebsaworld.com",
+        department: "Enterprise Consulting",
+        roleTitle: "Senior ERP Consultant · Supply Chain Practice",
+        employeeIdCode: "SBS-0482",
+        tierBadge: "Tier-1 Certified",
+        joinedDate: new Date("2021-03-15"),
+        password: "emp123",
+      },
+      {
+        fullName: "Sadini Wanniarachchi",
+        email: "sadini@sebsaworld.com",
+        department: "Enterprise Consulting",
+        roleTitle: "Senior ERP Consultant · Supply Chain Practice",
+        employeeIdCode: "SBS-0482",
+        tierBadge: "Tier-1 Certified",
+        joinedDate: new Date("2021-03-15"),
+        password: "emp123",
+      },
+      {
         fullName: "Test Employee",
-        email: empEmail,
+        email: "employee@sebsaworld.com",
         department: "IT",
-        passwordHash: empPassword,
+        roleTitle: "Software Engineer",
+        employeeIdCode: "SBS-0100",
+        tierBadge: "Tier-2 Certified",
+        joinedDate: new Date("2022-01-10"),
+        password: "emp123",
+      }
+    ];
+
+    for (const emp of employeesToSeed) {
+      const existing = await Employee.findOne({ email: emp.email });
+      if (!existing) {
+        const passwordHash = await hashPassword(emp.password);
+        await Employee.create({
+          fullName: emp.fullName,
+          email: emp.email,
+          department: emp.department,
+          roleTitle: emp.roleTitle,
+          employeeIdCode: emp.employeeIdCode,
+          tierBadge: emp.tierBadge,
+          joinedDate: emp.joinedDate,
+          passwordHash,
+          status: "active",
+        });
+        console.log(`✅ Employee created: ${emp.email} (password: ${emp.password})`);
+      } else {
+        console.log(`ℹ️ Employee ${emp.email} already exists.`);
+      }
+    }
+
+    // ── Create active AssessmentCycle ───────────────────────────────────────
+    const { AssessmentCycle } = await import("../src/db/models");
+    const adminRecord = await AdminUser.findOne({ email: adminEmail });
+    const existingCycle = await AssessmentCycle.findOne({ status: "active" });
+    if (!existingCycle && adminRecord) {
+      await AssessmentCycle.create({
+        label: "2026 H2",
         status: "active",
+        openedAt: new Date(),
+        openedBy: adminRecord._id,
       });
-      console.log(`✅ Default Employee created: ${empEmail} (password: emp123)`);
+      console.log("✅ Active AssessmentCycle created: 2026 H2");
     } else {
-      console.log(`ℹ️ Employee ${empEmail} already exists.`);
+      console.log("ℹ️ Active AssessmentCycle already exists.");
     }
 
     // ── Create Questions from documents or fallback to samples ──────────────

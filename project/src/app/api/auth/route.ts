@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPassword, signToken } from "@/lib/auth";
+import { verifyPassword, signToken, verifyToken } from "@/lib/auth";
 import { loginSchema } from "@/schemas";
 import connectDB from "@/db";
-import { Employee, AdminUser } from "@/db/models";
+import { Employee, AdminUser, AssessmentCycle, Attempt, Certificate } from "@/db/models";
 
-// POST /api/auth/login
-// Authenticates employee or admin, returns a signed JWT in an httpOnly cookie.
+// ── POST /api/auth (Login) ───────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  // Validate input with Zod
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -19,12 +17,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { email, password } = parsed.data;
-
-  // Connect to MongoDB
   await connectDB();
 
-  // ── Try employee collection first ─────────────────────────────────────────
-  const employee = await Employee.findOne({ email }).lean();
+  // Try employee collection first (case insensitive email search)
+  const employee = await Employee.findOne({ email: email.toLowerCase() }).lean();
 
   if (employee) {
     if (employee.status === "inactive") {
@@ -43,19 +39,33 @@ export async function POST(req: NextRequest) {
     }
 
     const token = await signToken({ id: employee._id.toString(), email: employee.email, role: "employee" });
-    const response = NextResponse.json({ success: true, data: { role: "employee" } });
+    const response = NextResponse.json({
+      success: true,
+      data: {
+        role: "employee",
+        user: {
+          id: employee._id.toString(),
+          fullName: employee.fullName,
+          email: employee.email,
+          department: employee.department,
+          roleTitle: employee.roleTitle,
+          employeeIdCode: employee.employeeIdCode,
+          tierBadge: employee.tierBadge,
+        }
+      }
+    });
     response.cookies.set("token", token, {
       httpOnly: true,
-      secure:   process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      path:     "/",
-      maxAge:   60 * 60 * 8, // 8 hours
+      path: "/",
+      maxAge: 60 * 60 * 8, // 8 hours
     });
     return response;
   }
 
-  // ── Try admin collection ──────────────────────────────────────────────────
-  const admin = await AdminUser.findOne({ email }).lean();
+  // Try admin collection
+  const admin = await AdminUser.findOne({ email: email.toLowerCase() }).lean();
 
   if (admin) {
     const valid = await verifyPassword(password, admin.passwordHash);
@@ -67,20 +77,131 @@ export async function POST(req: NextRequest) {
     }
 
     const token = await signToken({ id: admin._id.toString(), email: admin.email, role: "admin" });
-    const response = NextResponse.json({ success: true, data: { role: "admin" } });
+    const response = NextResponse.json({
+      success: true,
+      data: {
+        role: "admin",
+        user: {
+          id: admin._id.toString(),
+          fullName: admin.fullName,
+          email: admin.email,
+        }
+      }
+    });
     response.cookies.set("token", token, {
       httpOnly: true,
-      secure:   process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      path:     "/",
-      maxAge:   60 * 60 * 8,
+      path: "/",
+      maxAge: 60 * 60 * 8,
     });
     return response;
   }
 
-  // ── No match ──────────────────────────────────────────────────────────────
   return NextResponse.json(
     { success: false, error: "Incorrect email or password." },
     { status: 401 }
   );
+}
+
+// ── GET /api/auth (Current Session & Profile) ─────────────────────────────────
+export async function GET(req: NextRequest) {
+  const token = req.cookies.get("token")?.value;
+  if (!token) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  const payload = await verifyToken(token).catch(() => null);
+  if (!payload) {
+    return NextResponse.json({ success: false, error: "Invalid session" }, { status: 401 });
+  }
+
+  await connectDB();
+
+  if (payload.role === "employee") {
+    const employee = await Employee.findById(payload.sub).select("-passwordHash").lean();
+    if (!employee) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+    }
+
+    const activeCycle = await AssessmentCycle.findOne({ status: "active" }).lean();
+    let pendingAssessment = false;
+    let currentAttempt = null;
+
+    if (activeCycle) {
+      currentAttempt = await Attempt.findOne({
+        employeeId: employee._id,
+        cycleId: activeCycle._id,
+      }).lean();
+      pendingAssessment = !currentAttempt;
+    }
+
+    // Fetch employee certificates
+    const attempts = await Attempt.find({ employeeId: employee._id }).lean();
+    const attemptIds = attempts.map(a => a._id);
+    const certificates = await Certificate.find({ attemptId: { $in: attemptIds } })
+      .populate("attemptId")
+      .lean();
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        user: {
+          id: employee._id.toString(),
+          fullName: employee.fullName,
+          email: employee.email,
+          department: employee.department || "Enterprise Consulting",
+          roleTitle: employee.roleTitle || "Senior ERP Consultant · Supply Chain Practice",
+          employeeIdCode: employee.employeeIdCode || "SBS-0482",
+          tierBadge: employee.tierBadge || "Tier-1 Certified",
+          joinedDate: employee.joinedDate || new Date("2021-03-15"),
+          role: "employee",
+        },
+        activeCycle: activeCycle ? {
+          id: activeCycle._id.toString(),
+          label: activeCycle.label,
+          deadline: "November 30, 2026",
+        } : null,
+        pendingAssessment,
+        currentAttempt: currentAttempt ? {
+          id: currentAttempt._id.toString(),
+          score: currentAttempt.score,
+          submittedAt: currentAttempt.submittedAt,
+        } : null,
+        certificates: certificates.map(c => ({
+          id: c._id.toString(),
+          certificateNumber: c.certificateNumber,
+          issuedAt: c.issuedAt,
+        })),
+      }
+    });
+  }
+
+  if (payload.role === "admin") {
+    const admin = await AdminUser.findById(payload.sub).select("-passwordHash").lean();
+    if (!admin) {
+      return NextResponse.json({ success: false, error: "Admin not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        user: {
+          id: admin._id.toString(),
+          fullName: admin.fullName,
+          email: admin.email,
+          role: "admin",
+        }
+      }
+    });
+  }
+
+  return NextResponse.json({ success: false, error: "Invalid role" }, { status: 403 });
+}
+
+// ── DELETE /api/auth (Logout) ────────────────────────────────────────────────
+export async function DELETE() {
+  const response = NextResponse.json({ success: true, message: "Logged out" });
+  response.cookies.delete("token");
+  return response;
 }
