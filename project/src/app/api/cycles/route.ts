@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
   // ── Create the cycle ──────────────────────────────────────────────────────
   const cycle = await AssessmentCycle.create({
     label:    parsed.data.label,
+    passingScore: parsed.data.passingScore,
     openedBy: adminId,
     status:   "active",
   });

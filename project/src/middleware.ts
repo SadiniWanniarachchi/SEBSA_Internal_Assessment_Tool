@@ -16,6 +16,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── Dev-only routes: block entirely in production ─────────────────────────
+  const isDevRoute = pathname.startsWith("/dev") || pathname.startsWith("/api/dev");
+  if (isDevRoute && process.env.NODE_ENV === "production") {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   // ── Extract JWT cookie ────────────────────────────────────────────────────
   const token = request.cookies.get("token")?.value;
 

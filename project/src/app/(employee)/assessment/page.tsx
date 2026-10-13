@@ -19,7 +19,6 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import CheckCircleOutlinedIcon from "@mui/icons-material/CheckCircleOutlined";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import DownloadIcon from "@mui/icons-material/Download";
-import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import AdjustIcon from "@mui/icons-material/Adjust";
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
@@ -30,14 +29,12 @@ import VerifiedIcon from "@mui/icons-material/Verified";
 import CardMembershipIcon from "@mui/icons-material/CardMembership";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
-import StarIcon from "@mui/icons-material/Star";
-import SecurityIcon from "@mui/icons-material/Security";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import { Navbar } from "@/components/Navbar";
 
-const P = "#6343D8";
-const PD = "#5332C7";
+const P = "#3E0B78";
+const PD = "#2E0858";
 
 interface Option {
   key: "a" | "b" | "c" | "d";
@@ -68,11 +65,9 @@ interface CelebrationData {
   employeeName: string;
   employeeEmail: string;
   cycleLabel: string;
-  timeTakenFormatted: string;
   certificateNumber: string;
   certificateId: string;
-  categories: { name: string; percentage: number }[];
-  masteryLevel: string;
+  passingScore: number;
   perQuestion?: PerQuestionResult[];
 }
 
@@ -122,20 +117,14 @@ export default function AssessmentPage() {
             score: attempt.score,
             total: 10,
             percentage: Math.round((attempt.score / 10) * 100),
-            passed: attempt.score >= 8,
+            passed: attempt.passed ?? attempt.score >= (assessJson.cycle?.passingScore ?? 8),
             employeeName: authJson.data.user.fullName,
             employeeEmail: authJson.data.user.email,
             cycleLabel: assessJson.cycle?.label || "2026 H2 Knowledge Assessment",
-            timeTakenFormatted: "14m 32s",
             certificateNumber: "CR-26-081",
             certificateId: attempt.id,
-            categories: [
-              { name: "Cloud Architecture", percentage: 100 },
-              { name: "Compliance & Governance", percentage: 100 },
-              { name: "Security & Data Privacy", percentage: 92 },
-              { name: "System Integration", percentage: 80 },
-            ],
-            masteryLevel: attempt.score >= 9 ? "Distinction" : "Proficient",
+            passingScore: assessJson.cycle?.passingScore ?? 8,
+            perQuestion: attempt.perQuestion,
           });
           setLoading(false);
           return;
@@ -200,6 +189,32 @@ export default function AssessmentPage() {
     } catch {
       setIsSubmitting(false);
       setError("Submission error. Please check your connection and try again.");
+    }
+  };
+
+  const handleCertificateDownload = async () => {
+    if (!celebrationData) return;
+
+    try {
+      const response = await fetch(
+        `/api/certificates/${celebrationData.certificateId || celebrationData.certificateNumber}`
+      );
+      if (!response.ok) {
+        throw new Error("Certificate download failed");
+      }
+
+      const pdfBlob = await response.blob();
+      const downloadUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `SEBSA_Certificate_${celebrationData.certificateNumber.substring(0, 8)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (downloadError) {
+      console.error("Certificate download error:", downloadError);
+      setError("Unable to download the certificate. Please try again.");
     }
   };
 
@@ -311,6 +326,21 @@ export default function AssessmentPage() {
             alignItems: "center",
           }}
         >
+          <Box sx={{ width: "100%", mb: 2, textAlign: "left" }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: P,
+                fontWeight: 600,
+                cursor: "pointer",
+                "&:hover": { textDecoration: "underline" },
+              }}
+              onClick={() => router.push("/dashboard")}
+            >
+              Return to Dashboard →
+            </Typography>
+          </Box>
+
           {/* Trophy with glow */}
           <Box sx={{ position: "relative", mb: 3 }}>
             <Box
@@ -401,7 +431,7 @@ export default function AssessmentPage() {
             sx={{
               width: "100%",
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "7fr 5fr" },
+              gridTemplateColumns: "1fr",
               gap: { xs: 2, md: 3 },
             }}
           >
@@ -427,9 +457,9 @@ export default function AssessmentPage() {
                   Overall Score
                 </Typography>
                 <Chip
-                  icon={<StarIcon sx={{ fontSize: "0.75rem !important" }} />}
-                  label="Passed · Min 80%"
-                  color="success"
+                  icon={cd.passed ? <CheckCircleIcon sx={{ fontSize: "0.75rem !important" }} /> : <CancelIcon sx={{ fontSize: "0.75rem !important" }} />}
+                  label={cd.passed ? "PASS" : "FAIL"}
+                  color={cd.passed ? "success" : "error"}
                   size="small"
                   sx={{
                     fontSize: { xs: "0.6rem", sm: "0.65rem" },
@@ -475,38 +505,11 @@ export default function AssessmentPage() {
                 />
               </Box>
 
-              {/* Proficiency banner */}
-              <Box
-                sx={{
-                  mt: 2.5,
-                  bgcolor: alpha(P, 0.04),
-                  border: `1px solid ${alpha(P, 0.12)}`,
-                  borderRadius: "16px",
-                  p: { xs: 1.75, sm: 2 },
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 1.5,
-                }}
-              >
-                <SecurityIcon sx={{ color: P, fontSize: { xs: 18, sm: 20 }, mt: 0.15, flexShrink: 0 }} />
-                <Box>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ color: "#292634", fontSize: { xs: "0.78rem", sm: "0.82rem" }, fontWeight: 700 }}
-                  >
-                    Executive Proficiency Achieved
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>
-                    Top 5th percentile among senior business architecture evaluations in Sri Lanka HQ.
-                  </Typography>
-                </Box>
-              </Box>
-
-              {/* 3 metrics */}
+              {/* Assessment metrics */}
               <Box
                 sx={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gridTemplateColumns: "repeat(2, 1fr)",
                   gap: { xs: 1, sm: 2 },
                   mt: 3,
                   pt: 3,
@@ -514,12 +517,6 @@ export default function AssessmentPage() {
                 }}
               >
                 {[
-                  {
-                    icon: <AccessTimeOutlinedIcon sx={{ fontSize: 13 }} />,
-                    label: "Time Taken",
-                    value: cd.timeTakenFormatted,
-                    sub: "Limit: 30 mins",
-                  },
                   {
                     icon: <AdjustIcon sx={{ fontSize: 13 }} />,
                     label: "Accuracy",
@@ -573,121 +570,6 @@ export default function AssessmentPage() {
               </Box>
             </Box>
 
-            {/* RIGHT: Competency breakdown */}
-            <Box
-              sx={{
-                bgcolor: "white",
-                borderRadius: "24px",
-                border: `1px solid ${alpha(P, 0.08)}`,
-                boxShadow: `0 8px 32px ${alpha(P, 0.07)}`,
-                p: { xs: 3, sm: 4 },
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    pb: 2,
-                    borderBottom: `1px solid ${alpha(P, 0.08)}`,
-                    mb: 3,
-                  }}
-                >
-                  <Typography
-                    variant="overline"
-                    sx={{ color: "text.secondary", fontSize: "0.62rem", letterSpacing: "0.1em" }}
-                  >
-                    Competency Breakdown
-                  </Typography>
-                  <Typography
-                    variant="overline"
-                    sx={{ color: "text.secondary", fontSize: "0.62rem" }}
-                  >
-                    Score
-                  </Typography>
-                </Box>
-
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
-                  {cd.categories.map((cat) => (
-                    <Box key={cat.name}>
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          mb: 0.75,
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 500, fontSize: { xs: "0.75rem", sm: "0.8rem" }, color: "#292634" }}
-                        >
-                          {cat.name}
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 700, fontSize: { xs: "0.75rem", sm: "0.8rem" }, color: P }}
-                        >
-                          {cat.percentage}%
-                        </Typography>
-                      </Box>
-                      <Box
-                        sx={{
-                          width: "100%",
-                          height: 6,
-                          bgcolor: alpha(P, 0.1),
-                          borderRadius: "99px",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: `${cat.percentage}%`,
-                            height: "100%",
-                            background: `linear-gradient(90deg, ${PD}, ${P})`,
-                            borderRadius: "99px",
-                          }}
-                        />
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-
-              {/* Mastery badge */}
-              <Box
-                sx={{
-                  mt: 3,
-                  pt: 2.5,
-                  borderTop: `1px solid ${alpha(P, 0.08)}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ fontWeight: 500, fontSize: { xs: "0.75rem", sm: "0.8rem" } }}
-                >
-                  Mastery Level
-                </Typography>
-                <Chip
-                  label={cd.masteryLevel}
-                  sx={{
-                    bgcolor: alpha(P, 0.1),
-                    color: P,
-                    fontWeight: 700,
-                    fontSize: { xs: "0.68rem", sm: "0.72rem" },
-                    height: 26,
-                  }}
-                />
-              </Box>
-            </Box>
           </Box>
 
           {/* Certificate action row */}
@@ -766,9 +648,7 @@ export default function AssessmentPage() {
                 variant="contained"
                 size="small"
                 startIcon={<DownloadIcon />}
-                component="a"
-                href={`/api/certificates/${cd.certificateId || cd.certificateNumber}`}
-                download={`SEBSA_Certificate_${cd.certificateNumber.substring(0, 8)}.pdf`}
+                onClick={handleCertificateDownload}
                 sx={{
                   borderRadius: "10px",
                   fontSize: { xs: "0.72rem", sm: "0.78rem" },
@@ -996,38 +876,6 @@ export default function AssessmentPage() {
             </Box>
           )}
 
-          {/* Footer metadata */}
-          <Box
-            sx={{
-              width: "100%",
-              mt: 3,
-              display: "flex",
-              flexDirection: { xs: "column", sm: "row" },
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 1,
-              px: 0.5,
-            }}
-          >
-            <Typography variant="caption" color="text.secondary">
-              Recipient: {cd.employeeName}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Account: {cd.employeeEmail}
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                color: P,
-                fontWeight: 600,
-                cursor: "pointer",
-                "&:hover": { textDecoration: "underline" },
-              }}
-              onClick={() => router.push("/dashboard")}
-            >
-              Return to Dashboard →
-            </Typography>
-          </Box>
         </Box>
       </Box>
     );

@@ -38,18 +38,46 @@ export async function GET(req: NextRequest) {
   }).lean();
 
   if (existingAttempt) {
+    const questionIds = existingAttempt.selectedQuestionIds.map((id) => id.toString());
+    const reviewQuestions = await Question.find({ _id: { $in: questionIds } }).lean();
+    const storedAnswers = existingAttempt.answers instanceof Map
+      ? Object.fromEntries(existingAttempt.answers.entries())
+      : (existingAttempt.answers as Record<string, string>);
+    const perQuestion = questionIds.map((questionId) => {
+      const question = reviewQuestions.find((q) => q._id.toString() === questionId);
+      const userKey = storedAnswers[questionId] || null;
+      const correctKey = question?.correctOption ?? null;
+
+      return {
+        questionId,
+        questionText: question?.questionText ?? "",
+        options: [
+          { key: "a" as const, text: question?.optionA ?? "" },
+          { key: "b" as const, text: question?.optionB ?? "" },
+          { key: "c" as const, text: question?.optionC ?? "" },
+          { key: "d" as const, text: question?.optionD ?? "" },
+        ],
+        userKey,
+        correctKey,
+        isCorrect: userKey !== null && userKey === correctKey,
+      };
+    });
+
     return NextResponse.json({
       success: true,
       alreadyCompleted: true,
       cycle: {
         id: activeCycle._id.toString(),
         label: `${activeCycle.label} Knowledge Assessment`,
+        passingScore: activeCycle.passingScore ?? 8,
       },
       attempt: {
         id: existingAttempt._id.toString(),
         score: existingAttempt.score,
         total: 10,
         submittedAt: existingAttempt.submittedAt,
+        passed: existingAttempt.score >= (activeCycle.passingScore ?? 8),
+        perQuestion,
       }
     });
   }
@@ -90,6 +118,7 @@ export async function GET(req: NextRequest) {
       id: activeCycle._id.toString(),
       label: `${activeCycle.label} Knowledge Assessment`,
       timeLimitMinutes: 30,
+      passingScore: activeCycle.passingScore ?? 8,
     },
     questions: formattedQuestions,
   });

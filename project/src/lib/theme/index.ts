@@ -1,27 +1,31 @@
 import { createTheme, alpha } from "@mui/material/styles";
 
 export const sebsaColors = {
-  primary: "#6343D8",
-  primaryDark: "#5332C7",
-  ink: "#292634",
-  muted: "#777283",
-  line: "#E7E1EF",
-  page: "#FFFFFF",
-  lavender: "#F4EEFF",
-  green: "#178F91",
+  primary:     "#3E0B78",
+  primaryDark: "#2E0858",
+  ink:         "#292634",
+  muted:       "#777283",
+  line:        "#E7E1EF",
+  page:        "#FFFFFF",
+  lavender:    "#F0E6FF",
+  green:       "#129B14",
+  error:       "#A30D0D",
+  success:     "#129B14",
+  // Admin sidebar
+  sidebarBg:   "#0F2040",
 } as const;
 
-const P = sebsaColors.primary;
+const P  = sebsaColors.primary;
 const PD = sebsaColors.primaryDark;
 
 export const sebsaTheme = createTheme({
   palette: {
     mode: "light",
-    primary:    { main: P,       dark: PD,      light: "#6A3C9A", contrastText: "#fff" },
-    secondary:  { main: P,                         contrastText: "#fff" },
-    success:    { main: "#10B981", light: "#ECFDF5", dark: "#059669", contrastText: "#fff" },
-    error:      { main: "#EF4444", light: "#FEF2F2" },
-    warning:    { main: "#F59E0B", light: "#FFFBEB" },
+    primary:    { main: P,            dark: PD,           light: "#6A3C9A", contrastText: "#fff" },
+    secondary:  { main: P,                                                  contrastText: "#fff" },
+    success:    { main: "#129B14",    light: "#E8F5E9",   dark: "#0E7B10",  contrastText: "#fff" },
+    error:      { main: "#A30D0D",    light: "#FDEAEA" },
+    warning:    { main: "#D97706",    light: "#FFFBEB" },
     info:       { main: P },
     background: { default: sebsaColors.page, paper: sebsaColors.page },
     text:       { primary: sebsaColors.ink, secondary: sebsaColors.muted, disabled: "#9CA3AF" },
@@ -79,7 +83,7 @@ export const sebsaTheme = createTheme({
             background: P,
             boxShadow: `0 4px 15px ${alpha(P, 0.35)}`,
             "&:hover, &:active": {
-              background: P,
+              background: PD,
               boxShadow: `0 4px 15px ${alpha(P, 0.35)}`,
             },
             "&.Mui-disabled": { background: "#E5E7EB", color: "#9CA3AF", boxShadow: "none" },
@@ -89,6 +93,10 @@ export const sebsaTheme = createTheme({
             "&:hover": { borderColor: alpha(P, 0.3), backgroundColor: "transparent" },
           },
           "&.MuiButton-textPrimary:hover": { backgroundColor: "transparent" },
+          "&.MuiButton-containedError": {
+            background: "#A30D0D",
+            "&:hover, &:active": { background: "#8A0A0A" },
+          },
         },
         sizeSmall:  { paddingLeft: 14,  paddingRight: 14,  fontSize: "0.78rem" },
         sizeMedium: { paddingLeft: 20,  paddingRight: 20,  paddingTop: 8,  paddingBottom: 8 },
@@ -114,7 +122,7 @@ export const sebsaTheme = createTheme({
         root: {
           border: "1px solid #E0E4E5",
           borderRadius: 20,
-          boxShadow: "0 4px 24px rgba(32, 33, 105, 0.08), 0 1px 3px rgba(0,0,0,0.04)",
+          boxShadow: "0 4px 24px rgba(32, 33, 105, 0.06), 0 1px 3px rgba(0,0,0,0.04)",
           transition: "box-shadow 0.2s ease, transform 0.2s ease",
           backgroundImage: "none",
         },
@@ -151,7 +159,7 @@ export const sebsaTheme = createTheme({
             backgroundColor: "#FFFFFF",
             "& .MuiOutlinedInput-notchedOutline": { borderColor: P, borderWidth: "1.5px" },
           },
-          "&.Mui-error .MuiOutlinedInput-notchedOutline": { borderColor: "#EF4444" },
+          "&.Mui-error .MuiOutlinedInput-notchedOutline": { borderColor: "#A30D0D" },
         },
         input: {
           fontSize: "0.875rem",
@@ -209,10 +217,10 @@ export const sebsaTheme = createTheme({
     MuiChip: {
       styleOverrides: {
         root: { borderRadius: 8, fontWeight: 600, fontSize: "0.72rem", height: 26 },
-        colorSuccess:  { backgroundColor: "#ECFDF5", color: "#059669", border: "1px solid #A7F3D0" },
-        colorError:    { backgroundColor: "#FEF2F2", color: "#DC2626" },
-        colorPrimary:  { backgroundColor: alpha(P, 0.1), color: P },
-        colorWarning:  { backgroundColor: "#FFFBEB", color: "#B45309" },
+        colorSuccess: { backgroundColor: "#E8F5E9", color: "#129B14", border: "1px solid #A5D6A7" },
+        colorError:   { backgroundColor: "#FDEAEA", color: "#A30D0D", border: "1px solid #F5C6C6" },
+        colorPrimary: { backgroundColor: alpha(P, 0.1), color: P },
+        colorWarning: { backgroundColor: "#FFFBEB", color: "#B45309" },
       },
     },
 
@@ -229,7 +237,7 @@ export const sebsaTheme = createTheme({
             letterSpacing: "0.08em",
             textTransform: "uppercase",
             color: "#9CA3AF",
-            backgroundColor: "#F9F8FF",
+            backgroundColor: "#F9F6FF",
             borderBottom: `1px solid ${alpha(P, 0.08)}`,
             padding: "12px 16px",
           },
@@ -307,10 +315,10 @@ export const sebsaTheme = createTheme({
           borderRadius: 10,
           fontSize: "0.8rem",
           alignItems: "center",
-          "&.MuiAlert-standardError": { backgroundColor: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA" },
-          "&.MuiAlert-standardSuccess": { backgroundColor: "#ECFDF5", color: "#059669", border: "1px solid #A7F3D0" },
+          "&.MuiAlert-standardError":   { backgroundColor: "#FDEAEA", color: "#A30D0D", border: "1px solid #F5C6C6" },
+          "&.MuiAlert-standardSuccess": { backgroundColor: "#E8F5E9", color: "#129B14", border: "1px solid #A5D6A7" },
           "&.MuiAlert-standardWarning": { backgroundColor: "#FFFBEB", color: "#B45309", border: "1px solid #FDE68A" },
-          "&.MuiAlert-standardInfo": { backgroundColor: alpha(P, 0.06), color: PD, border: `1px solid ${alpha(P, 0.2)}` },
+          "&.MuiAlert-standardInfo":    { backgroundColor: alpha(P, 0.06), color: PD, border: `1px solid ${alpha(P, 0.2)}` },
         },
       },
     },

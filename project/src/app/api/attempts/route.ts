@@ -86,11 +86,15 @@ export async function POST(req: NextRequest) {
   }
 
   const certificateNumber = uuidv4();
+  const completedAt       = new Date();
+  const attemptNumber     = await Attempt.countDocuments({ employeeId });
   const pdfBuffer = await generateCertificate({
     employeeName:      emp.fullName,
-    cycleLabel:        `SEBSA Internal Assessment — ${cycle.label}`,
+    employeeEmail:     emp.email,
+    cycleLabel:        cycle.label,
     score,
-    dateCompleted:     new Date(),
+    attemptNumber,
+    dateCompleted:     completedAt,
     certificateNumber,
   });
 
@@ -118,7 +122,8 @@ export async function POST(req: NextRequest) {
   });
 
     const percentage = Math.round((score / selectedQuestions.length) * 100);
-    const passed = percentage >= 80;
+    const passingScore = cycle.passingScore ?? 8;
+    const passed = score >= passingScore;
 
     // Build per-question review breakdown (correct answer revealed after submission)
     const perQuestion = questionIds.map((qId) => {
@@ -147,6 +152,7 @@ export async function POST(req: NextRequest) {
         total:             selectedQuestions.length,
         percentage,
         passed,
+        passingScore,
         employeeName:      emp.fullName,
         employeeEmail:     emp.email,
         cycleLabel:        `${cycle.label} Knowledge Assessment`,
@@ -154,13 +160,6 @@ export async function POST(req: NextRequest) {
         certificateId:     cert._id.toString(),
         certificateNumber,
         attemptId:         attempt._id.toString(),
-        categories: [
-          { name: "Cloud Architecture", percentage: 100 },
-          { name: "Compliance & Governance", percentage: 100 },
-          { name: "Security & Data Privacy", percentage: Math.min(100, Math.max(70, percentage)) },
-          { name: "System Integration", percentage: Math.min(100, Math.max(65, percentage - 10)) },
-        ],
-        masteryLevel: score >= 9 ? "Distinction" : score >= 8 ? "Merit" : "Pass",
         perQuestion,
       },
     });

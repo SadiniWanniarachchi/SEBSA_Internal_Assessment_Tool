@@ -24,7 +24,7 @@ import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { loginSchema, type LoginInput } from "@/schemas";
 
-const P = "#44107F";
+const P = "#3E0B78";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -55,11 +55,12 @@ export default function LoginPage() {
         body: JSON.stringify(data),
       });
       const json = await res.json();
-      setLoading(false);
       if (!json.success) {
+        setLoading(false); // Only re-enable on error
         setServerError(json.error ?? "Login failed. Please verify your credentials.");
         return;
       }
+      // Keep loading=true during redirect so button stays disabled
       router.push(json.data.role === "admin" ? "/admin/tracker" : "/dashboard");
     } catch {
       setLoading(false);
@@ -344,6 +345,7 @@ export default function LoginPage() {
             </Divider>
             <Box sx={{ display: "flex", gap: 1.5, justifyContent: "center", mt: 1.5 }}>
               <Button
+                type="button"
                 size="small"
                 variant="outlined"
                 onClick={() => { setValue("email", "sadini.wanniarachchi@sebsaworld.com"); setValue("password", "emp123"); }}
@@ -361,6 +363,7 @@ export default function LoginPage() {
                 Employee: Sadini
               </Button>
               <Button
+                type="button"
                 size="small"
                 variant="outlined"
                 onClick={() => { setValue("email", "admin@sebsaworld.com"); setValue("password", "admin123"); }}

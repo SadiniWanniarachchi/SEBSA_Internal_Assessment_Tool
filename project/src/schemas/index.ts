@@ -38,6 +38,7 @@ export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
 // ─── Assessment Cycles ────────────────────────────────────────────────────────
 export const createCycleSchema = z.object({
   label: z.string().min(3, "Cycle label must be at least 3 characters"), // e.g. "2026 H2"
+  passingScore: z.number().int().min(0).max(10).default(8),
 });
 export type CreateCycleInput = z.infer<typeof createCycleSchema>;
 

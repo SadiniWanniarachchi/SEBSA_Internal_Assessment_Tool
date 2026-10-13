@@ -136,12 +136,23 @@ export async function GET(req: NextRequest) {
       pendingAssessment = !currentAttempt;
     }
 
-    // Fetch employee certificates
-    const attempts = await Attempt.find({ employeeId: employee._id }).lean();
-    const attemptIds = attempts.map(a => a._id);
-    const certificates = await Certificate.find({ attemptId: { $in: attemptIds } })
-      .populate("attemptId")
+    // Fetch employee certificates with attempt + cycle data for history display
+    const allAttempts = await Attempt.find({ employeeId: employee._id })
+      .populate({ path: "cycleId", select: "label" })
       .lean();
+    const attemptIds = allAttempts.map(a => a._id);
+    const certificates = await Certificate.find({ attemptId: { $in: attemptIds } }).lean();
+
+    const certList = certificates.map(c => {
+      const attempt = allAttempts.find(a => a._id.toString() === c.attemptId.toString());
+      return {
+        id: c._id.toString(),
+        certificateNumber: c.certificateNumber,
+        issuedAt: c.issuedAt,
+        score: attempt?.score ?? null,
+        cycleLabel: (attempt?.cycleId as any)?.label ?? null,
+      };
+    }).sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
 
     return NextResponse.json({
       success: true,
@@ -168,11 +179,7 @@ export async function GET(req: NextRequest) {
           score: currentAttempt.score,
           submittedAt: currentAttempt.submittedAt,
         } : null,
-        certificates: certificates.map(c => ({
-          id: c._id.toString(),
-          certificateNumber: c.certificateNumber,
-          issuedAt: c.issuedAt,
-        })),
+        certificates: certList,
       }
     });
   }
