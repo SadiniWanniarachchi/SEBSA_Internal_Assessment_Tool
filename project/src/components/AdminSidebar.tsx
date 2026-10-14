@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import Drawer from "@mui/material/Drawer";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -11,8 +13,8 @@ import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
+import ManageAccountsOutlinedIcon from "@mui/icons-material/ManageAccountsOutlined";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
-import { useRouter } from "next/navigation";
 
 const SIDEBAR_WIDTH = 280;
 
@@ -22,10 +24,11 @@ const ACCENT  = "#6B8FD4";
 const INACTIVE= "#FFFFFF";
 
 const navItems = [
-  { label: "Tracker",         href: "/admin/tracker",   icon: <DashboardOutlinedIcon sx={{ fontSize: 20 }} /> },
-  { label: "Employees",       href: "/admin/employees", icon: <PeopleAltOutlinedIcon sx={{ fontSize: 20 }} /> },
-  { label: "Question Bank",   href: "/admin/questions", icon: <QuizOutlinedIcon      sx={{ fontSize: 20 }} /> },
-  { label: "Send Assessment", href: "/admin/cycles",    icon: <SendOutlinedIcon      sx={{ fontSize: 20 }} /> },
+  { label: "Tracker",            href: "/admin/tracker",     icon: <DashboardOutlinedIcon         sx={{ fontSize: 20 }} /> },
+  { label: "Employees",          href: "/admin/employees",   icon: <PeopleAltOutlinedIcon          sx={{ fontSize: 20 }} /> },
+  { label: "Question Bank",      href: "/admin/questions",   icon: <QuizOutlinedIcon               sx={{ fontSize: 20 }} /> },
+  { label: "Send Assessments",   href: "/admin/assessments", icon: <SendOutlinedIcon               sx={{ fontSize: 20 }} /> },
+  { label: "My Profile",         href: "/admin/profile",     icon: <ManageAccountsOutlinedIcon     sx={{ fontSize: 20 }} /> },
 ];
 
 interface AdminSidebarProps {
@@ -35,11 +38,15 @@ interface AdminSidebarProps {
 
 function SidebarContent() {
   const pathname = usePathname();
-  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
     await fetch("/api/auth", { method: "DELETE" });
-    router.push("/login");
+    // Full page reload so Next.js router cache is cleared and middleware
+    // re-evaluates the (now missing) auth cookie from scratch.
+    window.location.href = "/login";
   };
 
   return (
@@ -126,28 +133,27 @@ function SidebarContent() {
       <List disablePadding sx={{ px: 1.5, mt: 2 }}>
         <ListItemButton
           onClick={handleLogout}
+          disabled={loggingOut}
           sx={{
             borderRadius: 1.5,
             px: 1.5,
             py: 1.35,
             color: "#FFFFFF",
-            "&:hover": {
-              bgcolor: "rgba(255,255,255,0.07)",
-            },
+            opacity: loggingOut ? 0.6 : 1,
+            "&:hover": { bgcolor: "rgba(255,255,255,0.07)" },
+            "&.Mui-disabled": { color: "#FFFFFF" },
           }}
         >
           <ListItemIcon sx={{ color: "inherit", minWidth: 40 }}>
-            <LogoutOutlinedIcon sx={{ fontSize: 22 }} />
+            {loggingOut
+              ? <CircularProgress size={20} sx={{ color: "#FFFFFF" }} />
+              : <LogoutOutlinedIcon sx={{ fontSize: 22 }} />}
           </ListItemIcon>
           <ListItemText
-            primary="Log out"
+            primary={loggingOut ? "Logging out…" : "Log out"}
             slotProps={{
               primary: {
-                sx: {
-                  fontSize: "0.95rem",
-                  fontWeight: 600,
-                  color: "inherit",
-                },
+                sx: { fontSize: "0.95rem", fontWeight: 600, color: "inherit" },
               },
             }}
           />

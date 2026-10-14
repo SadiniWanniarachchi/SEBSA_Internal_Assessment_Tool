@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Avatar from "@mui/material/Avatar";
+import CircularProgress from "@mui/material/CircularProgress";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Divider from "@mui/material/Divider";
@@ -40,15 +41,18 @@ export function Navbar({
 }: NavbarProps) {
   const router = useRouter();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const initials = userName
     ? userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
     : "SW";
 
   const handleLogout = async () => {
+    if (loggingOut) return;
     setMenuAnchor(null);
+    setLoggingOut(true);
     await fetch("/api/auth", { method: "DELETE" });
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (
@@ -166,10 +170,13 @@ export function Navbar({
               <Divider sx={{ my: 0.5 }} />
               <MenuItem
                 onClick={handleLogout}
+                disabled={loggingOut}
                 sx={{ color: "error.main", gap: 1.25, py: 1, fontSize: "0.85rem", fontWeight: 600 }}
               >
-                <LogoutIcon sx={{ fontSize: 17 }} />
-                Log out
+                {loggingOut
+                  ? <CircularProgress size={17} color="error" />
+                  : <LogoutIcon sx={{ fontSize: 17 }} />}
+                {loggingOut ? "Logging out…" : "Log out"}
               </MenuItem>
             </>
           )}

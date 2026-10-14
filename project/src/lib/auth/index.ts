@@ -2,7 +2,8 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import type { JwtPayload, UserRole } from "@/types";
 
-const SALT_ROUNDS = 12;
+// 10 rounds in dev (~100 ms), 12 in production (~400 ms) — bcrypt cost scales exponentially
+const SALT_ROUNDS = process.env.NODE_ENV === "production" ? 12 : 10;
 
 // ─── Password hashing ─────────────────────────────────────────────────────────
 

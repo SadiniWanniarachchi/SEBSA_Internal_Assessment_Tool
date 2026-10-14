@@ -2,7 +2,8 @@ import mongoose, { Schema, Document, Model, Types } from "mongoose";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Certificate Model
-// One document per issued certificate (FR-07, FR-08, FR-09)
+// One document per issued certificate (FR-07, FR-08, FR-09).
+// emailStatus tracks whether the certificate email was sent to the employee.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ICertificate extends Document {
@@ -10,6 +11,9 @@ export interface ICertificate extends Document {
   certificateNumber: string;         // UUID
   filePath:          string;         // S3 key or file path
   issuedAt:          Date;
+  emailStatus:       "pending" | "sent" | "failed";
+  emailSentAt?:      Date;
+  emailError?:       string;
   createdAt:         Date;
   updatedAt:         Date;
 }
@@ -20,12 +24,16 @@ const CertificateSchema = new Schema<ICertificate>(
     certificateNumber: { type: String, required: true, unique: true },
     filePath: { type: String, required: true },
     issuedAt: { type: Date, default: () => new Date() },
+    emailStatus: {
+      type: String,
+      enum: ["pending", "sent", "failed"],
+      default: "pending",
+    },
+    emailSentAt: { type: Date },
+    emailError:  { type: String },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
-
 
 export const Certificate: Model<ICertificate> =
   mongoose.models.Certificate ?? mongoose.model<ICertificate>("Certificate", CertificateSchema);

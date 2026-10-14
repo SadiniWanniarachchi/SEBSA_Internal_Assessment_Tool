@@ -6,3 +6,4 @@ export * from "./AssessmentCycle";
 export * from "./Attempt";
 export * from "./Certificate";
 export * from "./AdminAuditLog";
+export * from "./Invitation";

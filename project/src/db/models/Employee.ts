@@ -37,6 +37,8 @@ const EmployeeSchema = new Schema<IEmployee>(
 );
 
 
+EmployeeSchema.index({ status: 1 });
+
 // Prevent model re-registration on hot reload
 export const Employee: Model<IEmployee> =
   mongoose.models.Employee ?? mongoose.model<IEmployee>("Employee", EmployeeSchema);

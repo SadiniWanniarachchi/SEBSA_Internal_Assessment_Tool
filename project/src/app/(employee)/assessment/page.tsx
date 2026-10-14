@@ -68,6 +68,7 @@ interface CelebrationData {
   certificateNumber: string;
   certificateId: string;
   passingScore: number;
+  attemptNumber?: number;
   perQuestion?: PerQuestionResult[];
 }
 
@@ -77,12 +78,26 @@ export default function AssessmentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Invitation gate states
+  const [invitationExpired, setInvitationExpired] = useState(false);
+  const [expiredAt, setExpiredAt] = useState<string | null>(null);
+  const [notInvited, setNotInvited] = useState(false);
+
   const [user, setUser] = useState<any>(null);
   const [cycle, setCycle] = useState<any>(null);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, "a" | "b" | "c" | "d">>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attemptNumber, setAttemptNumber] = useState<1 | 2>(1);
+
+  // Retry banner (shown when loading page for attempt 2)
+  const [canRetryBanner, setCanRetryBanner] = useState(false);
+  const [attempt1Data, setAttempt1Data] = useState<{ score: number; total: number } | null>(null);
+
+  // Post-submission retry-available screen (attempt 1 done, score < threshold)
+  const [retryAvailable, setRetryAvailable] = useState(false);
+  const [retryScore, setRetryScore] = useState<{ score: number; total: number } | null>(null);
 
   const [completed, setCompleted] = useState(false);
   const [celebrationData, setCelebrationData] = useState<CelebrationData | null>(null);
@@ -93,16 +108,35 @@ export default function AssessmentPage() {
   useEffect(() => {
     async function initAssessment() {
       try {
-        const authRes = await fetch("/api/auth");
-        const authJson = await authRes.json();
+        const [authRes, assessRes] = await Promise.all([
+          fetch("/api/auth"),
+          fetch("/api/assessment"),
+        ]);
+        const [authJson, assessJson] = await Promise.all([
+          authRes.json(),
+          assessRes.json(),
+        ]);
+
         if (!authJson.success || authJson.data.user.role !== "employee") {
           router.push("/login");
           return;
         }
         setUser(authJson.data.user);
 
-        const assessRes = await fetch("/api/assessment");
-        const assessJson = await assessRes.json();
+        // Invitation not found
+        if (!assessJson.success && assessJson.invitationError) {
+          setNotInvited(true);
+          setLoading(false);
+          return;
+        }
+
+        // Invitation expired
+        if (!assessJson.success && assessJson.invitationExpired) {
+          setInvitationExpired(true);
+          setExpiredAt(assessJson.expiredAt ?? null);
+          setLoading(false);
+          return;
+        }
 
         if (!assessJson.success) {
           setError(assessJson.error || "Failed to load assessment.");
@@ -110,24 +144,35 @@ export default function AssessmentPage() {
           return;
         }
 
+        // Assessment already finalized (Cases A + B from API)
         if (assessJson.alreadyCompleted) {
           setCompleted(true);
           const attempt = assessJson.attempt;
           setCelebrationData({
             score: attempt.score,
-            total: 10,
-            percentage: Math.round((attempt.score / 10) * 100),
+            total: attempt.total ?? 10,
+            percentage: Math.round((attempt.score / (attempt.total ?? 10)) * 100),
             passed: attempt.passed ?? attempt.score >= (assessJson.cycle?.passingScore ?? 8),
             employeeName: authJson.data.user.fullName,
             employeeEmail: authJson.data.user.email,
-            cycleLabel: assessJson.cycle?.label || "2026 H2 Knowledge Assessment",
-            certificateNumber: "CR-26-081",
-            certificateId: attempt.id,
+            cycleLabel: assessJson.cycle?.label || "Assessment",
+            certificateNumber: attempt.certificateNumber ?? "",
+            certificateId: attempt.id ?? attempt._id ?? "",
             passingScore: assessJson.cycle?.passingScore ?? 8,
+            attemptNumber: attempt.attemptNumber ?? 1,
             perQuestion: attempt.perQuestion,
           });
           setLoading(false);
           return;
+        }
+
+        // Retry available (Case C: attempt 1 done, score < threshold, same questions)
+        if (assessJson.canRetry) {
+          setCanRetryBanner(true);
+          setAttempt1Data(assessJson.attempt1 ?? null);
+          setAttemptNumber(2);
+        } else {
+          setAttemptNumber(assessJson.attemptNumber ?? 1);
         }
 
         setCycle(assessJson.cycle);
@@ -176,15 +221,40 @@ export default function AssessmentPage() {
       const res = await fetch("/api/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cycleId: cycle.id, answers, timeTakenFormatted: "14m 32s" }),
+        body: JSON.stringify({ cycleId: cycle.id, answers }),
       });
       const json = await res.json();
       setIsSubmitting(false);
       if (!json.success) {
-        setError(json.error || "Failed to submit assessment.");
+        if (json.invitationExpired) {
+          setInvitationExpired(true);
+        } else {
+          setError(json.error || "Failed to submit assessment.");
+        }
         return;
       }
-      setCelebrationData(json.data);
+      const data = json.data;
+      // Attempt 1, score below retry threshold → retry available screen
+      if (!data.isFinal) {
+        setRetryScore({ score: data.score, total: data.total ?? 10 });
+        setRetryAvailable(true);
+        return;
+      }
+      // Final attempt → celebration/result screen
+      setCelebrationData({
+        score: data.score,
+        total: data.total ?? 10,
+        percentage: data.percentage ?? Math.round((data.score / (data.total ?? 10)) * 100),
+        passed: data.passed,
+        employeeName: data.employeeName,
+        employeeEmail: data.employeeEmail,
+        cycleLabel: data.cycleLabel,
+        certificateNumber: data.certificateNumber ?? "",
+        certificateId: data.certificateId ?? data.attemptId ?? "",
+        passingScore: data.passingScore ?? 8,
+        attemptNumber: data.attemptNumber ?? 1,
+        perQuestion: data.perQuestion,
+      });
       setCompleted(true);
     } catch {
       setIsSubmitting(false);
@@ -217,6 +287,88 @@ export default function AssessmentPage() {
       setError("Unable to download the certificate. Please try again.");
     }
   };
+
+  // ── Invitation expired ────────────────────────────────────────────────────
+  if (invitationExpired) {
+    const formattedExpiry = expiredAt
+      ? new Date(expiredAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+      : null;
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#F9F8FF", p: 3 }}>
+        <Box sx={{ width: "100%", maxWidth: 460, bgcolor: "white", borderRadius: "24px", border: "1px solid #FCE8E8", boxShadow: "0 20px 60px rgba(0,0,0,0.08)", p: { xs: 4, sm: 5 }, textAlign: "center" }}>
+          <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center", mx: "auto", mb: 2.5 }}>
+            <LockOutlinedIcon sx={{ color: "#EF4444", fontSize: 28 }} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#292634", mb: 1 }}>Invitation Expired</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: formattedExpiry ? 1 : 3.5, lineHeight: 1.65 }}>
+            Your assessment invitation has expired. Please contact HR or your Admin to receive a new invitation link.
+          </Typography>
+          {formattedExpiry && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 3 }}>
+              Expired on {formattedExpiry}
+            </Typography>
+          )}
+          <Button fullWidth variant="contained" size="large" onClick={() => router.push("/dashboard")}
+            sx={{ background: P, boxShadow: `0 6px 16px ${alpha(P, 0.35)}`, borderRadius: "14px", fontWeight: 700 }}>
+            Back to Dashboard
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── Not invited ───────────────────────────────────────────────────────────
+  if (notInvited) {
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#F9F8FF", p: 3 }}>
+        <Box sx={{ width: "100%", maxWidth: 460, bgcolor: "white", borderRadius: "24px", border: `1px solid ${alpha(P, 0.15)}`, boxShadow: "0 20px 60px rgba(0,0,0,0.08)", p: { xs: 4, sm: 5 }, textAlign: "center" }}>
+          <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: alpha(P, 0.08), display: "flex", alignItems: "center", justifyContent: "center", mx: "auto", mb: 2.5 }}>
+            <AssignmentTurnedInOutlinedIcon sx={{ color: P, fontSize: 28 }} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#292634", mb: 1 }}>No Active Assessment</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5, lineHeight: 1.65 }}>
+            You have not been invited to the current assessment cycle. Please contact HR or your Admin if you believe this is an error.
+          </Typography>
+          <Button fullWidth variant="contained" size="large" onClick={() => router.push("/dashboard")}
+            sx={{ background: P, boxShadow: `0 6px 16px ${alpha(P, 0.35)}`, borderRadius: "14px", fontWeight: 700 }}>
+            Back to Dashboard
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── Retry available (after submitting attempt 1 with score < threshold) ───
+  if (retryAvailable && retryScore) {
+    const pct = Math.round((retryScore.score / retryScore.total) * 100);
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#F9F8FF", p: 3 }}>
+        <Box sx={{ width: "100%", maxWidth: 480, bgcolor: "white", borderRadius: "24px", border: `1px solid ${alpha(P, 0.1)}`, boxShadow: "0 20px 60px rgba(0,0,0,0.08)", p: { xs: 4, sm: 5 }, textAlign: "center" }}>
+          <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: "#FFF7ED", display: "flex", alignItems: "center", justifyContent: "center", mx: "auto", mb: 2.5 }}>
+            <EmojiEventsIcon sx={{ color: "#F59E0B", fontSize: 28 }} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#292634", mb: 1 }}>Attempt 1 Complete</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.65 }}>
+            You scored{" "}
+            <Box component="strong" sx={{ color: "#292634" }}>{retryScore.score}/{retryScore.total} ({pct}%)</Box>{" "}
+            on your first attempt. The pass mark is {cycle?.passingScore ?? 8}/10.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5, lineHeight: 1.65 }}>
+            You have one more attempt available using the <strong>same questions</strong>. Take your time to review before starting.
+          </Typography>
+          <Button fullWidth variant="contained" size="large"
+            onClick={() => { setRetryAvailable(false); window.location.reload(); }}
+            sx={{ background: `linear-gradient(135deg, ${PD}, ${P})`, boxShadow: `0 6px 16px ${alpha(P, 0.35)}`, borderRadius: "14px", fontWeight: 700, mb: 1.5 }}>
+            Start Second Attempt
+          </Button>
+          <Button fullWidth variant="outlined" size="large" onClick={() => router.push("/dashboard")}
+            sx={{ borderRadius: "14px", fontWeight: 600, borderColor: alpha(P, 0.3), color: P }}>
+            Back to Dashboard
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -526,7 +678,7 @@ export default function AssessmentPage() {
                   {
                     icon: <AssignmentTurnedInOutlinedIcon sx={{ fontSize: 13 }} />,
                     label: "Attempts",
-                    value: "Attempt 1",
+                    value: `Attempt ${cd.attemptNumber ?? 1}`,
                     sub: "Final attempt",
                   },
                 ].map((m) => (
@@ -949,6 +1101,34 @@ export default function AssessmentPage() {
             Back to Dashboard
           </Button>
         </Box>
+
+        {/* Retry banner (attempt 2) */}
+        {canRetryBanner && attempt1Data && (
+          <Box
+            sx={{
+              mb: { xs: 2, sm: 2.5 },
+              px: 2,
+              py: 1.5,
+              borderRadius: "14px",
+              bgcolor: "#FFF7ED",
+              border: "1px solid #FED7AA",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 1.5,
+            }}
+          >
+            <EmojiEventsIcon sx={{ color: "#F59E0B", fontSize: 20, mt: 0.1, flexShrink: 0 }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.82rem", fontWeight: 700, color: "#92400E", mb: 0.25 }}>
+                Second Attempt — Same Questions
+              </Typography>
+              <Typography sx={{ fontSize: "0.78rem", color: "#92400E", lineHeight: 1.5 }}>
+                You scored <strong>{attempt1Data.score}/{attempt1Data.total}</strong> on your first attempt.
+                This is your final attempt. The same questions are shown — answer carefully.
+              </Typography>
+            </Box>
+          </Box>
+        )}
 
         {/* Sub-header */}
         <Box

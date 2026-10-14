@@ -13,6 +13,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   Divider,
   IconButton,
@@ -32,6 +33,7 @@ import {
   AddOutlined,
   BlockOutlined,
   CheckCircleOutlineOutlined,
+  DeleteOutlined,
   PersonOutlined,
   SearchOutlined,
 } from "@mui/icons-material";
@@ -41,26 +43,25 @@ const colors = sebsaColors;
 const P = colors.primary;
 
 interface Employee {
-  id: string;
+  id:     string;
   fullName: string;
-  email: string;
-  department: string | null;
-  roleTitle?: string;
-  employeeIdCode?: string;
+  email:  string;
   status: "active" | "inactive";
 }
 
-const emptyForm = { fullName: "", email: "", department: "", password: "" };
+const emptyForm = { fullName: "", email: "" };
 
 export default function AdminEmployeesPage() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [pageMessage, setPageMessage] = useState("");
+  const [employees, setEmployees]       = useState<Employee[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [search, setSearch]             = useState("");
+  const [dialogOpen, setDialogOpen]     = useState(false);
+  const [form, setForm]                 = useState(emptyForm);
+  const [saving, setSaving]             = useState(false);
+  const [formError, setFormError]       = useState("");
+  const [pageMessage, setPageMessage]   = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
+  const [deleting, setDeleting]         = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -71,7 +72,7 @@ export default function AdminEmployeesPage() {
   }, []);
 
   async function fetchEmployees() {
-    const res = await fetch("/api/employees");
+    const res  = await fetch("/api/employees");
     const json = await res.json();
     if (json.success) setEmployees(json.data);
   }
@@ -80,10 +81,10 @@ export default function AdminEmployeesPage() {
     setSaving(true);
     setFormError("");
     try {
-      const res = await fetch("/api/employees", {
-        method: "POST",
+      const res  = await fetch("/api/employees", {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body:    JSON.stringify(form),
       });
       const json = await res.json();
       if (!json.success) {
@@ -104,19 +105,38 @@ export default function AdminEmployeesPage() {
   async function toggleStatus(emp: Employee) {
     const newStatus = emp.status === "active" ? "inactive" : "active";
     await fetch(`/api/employees/${emp.id}`, {
-      method: "PATCH",
+      method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
+      body:    JSON.stringify({ status: newStatus }),
     });
     setPageMessage(`${emp.fullName} has been ${newStatus === "active" ? "re-activated" : "deactivated"}.`);
     await fetchEmployees();
   }
 
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res  = await fetch(`/api/employees/${deleteTarget.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (json.success) {
+        setPageMessage(json.message ?? `${deleteTarget.fullName} has been permanently deleted.`);
+        await fetchEmployees();
+      } else {
+        setPageMessage(`Error: ${json.error}`);
+      }
+    } catch {
+      setPageMessage("Network error while deleting employee.");
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }
+
   const filtered = employees.filter(
     (e) =>
       e.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      e.email.toLowerCase().includes(search.toLowerCase()) ||
-      (e.department ?? "").toLowerCase().includes(search.toLowerCase())
+      e.email.toLowerCase().includes(search.toLowerCase())
   );
 
   const activeCount = employees.filter((e) => e.status === "active").length;
@@ -131,7 +151,8 @@ export default function AdminEmployeesPage() {
 
   return (
     <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4 }, py: { xs: 3, sm: 4 } }}>
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3, justifyContent: "space-between", alignItems: { xs: "stretch", sm: "center" } }}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}
+        sx={{ mb: 3, justifyContent: "space-between", alignItems: { xs: "stretch", sm: "center" } }}>
         <Box>
           <Typography sx={{ fontSize: { xs: 22, sm: 26 }, fontWeight: 800, letterSpacing: "-0.5px" }}>
             Employee Management
@@ -164,7 +185,7 @@ export default function AdminEmployeesPage() {
           </Stack>
           <TextField
             size="small"
-            placeholder="Search name, email, department…"
+            placeholder="Search name or email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchOutlined sx={{ fontSize: 18, color: colors.muted }} /></InputAdornment> } }}
@@ -177,8 +198,6 @@ export default function AdminEmployeesPage() {
             <TableHead>
               <TableRow>
                 <TableCell>Employee</TableCell>
-                <TableCell>Department</TableCell>
-                <TableCell>Employee ID</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
@@ -186,7 +205,7 @@ export default function AdminEmployeesPage() {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} sx={{ textAlign: "center", py: 4, color: colors.muted }}>
+                  <TableCell colSpan={3} sx={{ textAlign: "center", py: 4, color: colors.muted }}>
                     {search ? "No employees match your search." : "No employees found."}
                   </TableCell>
                 </TableRow>
@@ -205,14 +224,6 @@ export default function AdminEmployeesPage() {
                       </Stack>
                     </TableCell>
                     <TableCell>
-                      <Typography sx={{ fontSize: 13 }}>{emp.department ?? "—"}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography sx={{ fontSize: 12, color: colors.muted, fontFamily: "monospace" }}>
-                        {emp.employeeIdCode ?? "—"}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
                       <Chip
                         label={emp.status}
                         color={emp.status === "active" ? "success" : "default"}
@@ -221,17 +232,28 @@ export default function AdminEmployeesPage() {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title={emp.status === "active" ? "Deactivate" : "Re-activate"}>
-                        <IconButton
-                          size="small"
-                          onClick={() => toggleStatus(emp)}
-                          color={emp.status === "active" ? "warning" : "success"}
-                        >
-                          {emp.status === "active"
-                            ? <BlockOutlined sx={{ fontSize: 16 }} />
-                            : <CheckCircleOutlineOutlined sx={{ fontSize: 16 }} />}
-                        </IconButton>
-                      </Tooltip>
+                      <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
+                        <Tooltip title={emp.status === "active" ? "Deactivate" : "Re-activate"}>
+                          <IconButton
+                            size="small"
+                            onClick={() => toggleStatus(emp)}
+                            color={emp.status === "active" ? "warning" : "success"}
+                          >
+                            {emp.status === "active"
+                              ? <BlockOutlined sx={{ fontSize: 16 }} />
+                              : <CheckCircleOutlineOutlined sx={{ fontSize: 16 }} />}
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete employee">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => setDeleteTarget(emp)}
+                          >
+                            <DeleteOutlined sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 ))
@@ -241,22 +263,60 @@ export default function AdminEmployeesPage() {
         </TableContainer>
       </Card>
 
-      {/* Add Employee Dialog */}
+      {/* Add Employee Dialog — name + email only */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Add New Employee</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             {formError && <Alert severity="error">{formError}</Alert>}
-            <TextField label="Full Name" fullWidth value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-            <TextField label="Email" type="email" fullWidth value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <TextField label="Department (optional)" fullWidth value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-            <TextField label="Temporary Password" type="password" fullWidth value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} helperText="Employee can change this later." />
+            <TextField
+              label="Full Name"
+              fullWidth
+              value={form.fullName}
+              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+              autoFocus
+            />
+            <TextField
+              label="Company Email"
+              type="email"
+              fullWidth
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              helperText="The employee will log in with their company email and password."
+            />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)} color="inherit">Cancel</Button>
           <Button onClick={handleAdd} variant="contained" disabled={saving}>
             {saving ? "Adding…" : "Add Employee"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Permanent Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ color: colors.error }}>Permanently Delete Employee?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will <strong>permanently remove</strong>{" "}
+            <strong>{deleteTarget?.fullName}</strong> ({deleteTarget?.email}) from the system.
+            <br /><br />
+            This action <strong>cannot be undone</strong>. The employee's personal profile will be deleted from the database.
+            Assessment history and certificates are retained for audit purposes.
+            <br /><br />
+            To simply block access without deleting data, use <strong>Deactivate</strong> instead.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} color="inherit" disabled={deleting}>Cancel</Button>
+          <Button
+            onClick={handleDelete}
+            variant="contained"
+            color="error"
+            disabled={deleting}
+          >
+            {deleting ? "Deleting…" : "Permanently Delete"}
           </Button>
         </DialogActions>
       </Dialog>

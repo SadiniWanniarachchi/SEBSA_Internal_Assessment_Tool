@@ -1,7 +1,7 @@
 # SEBSA Internal Assessment Automation — Web Application
 
 > Internal knowledge assessment portal for SEBSA employees.
-> Built with **Next.js 14 (App Router)** · **TypeScript** · **Tailwind CSS** · **PostgreSQL (Drizzle ORM)** · **pdf-lib** · **Resend**
+> Built with **Next.js 14 (App Router)** · **TypeScript** · **Tailwind CSS** · **MongoDB (Mongoose)** · **pdf-lib** · **Resend**
 
 ---
 
@@ -9,7 +9,7 @@
 
 ### 1. Prerequisites
 - Node.js 18+
-- A PostgreSQL database (Supabase, Neon, local Docker, etc.)
+- A MongoDB database (MongoDB Atlas or a local MongoDB instance)
 - A [Resend](https://resend.com) account for transactional email
 
 ### 2. Install dependencies
@@ -18,22 +18,22 @@ npm install
 ```
 
 ### 3. Configure environment variables
-```bash
-cp .env.example .env.local
-# Edit .env.local and fill in DATABASE_URL, JWT_SECRET, RESEND_API_KEY etc.
+Create `.env.local` and configure the database, authentication, and email settings:
+```env
+MONGODB_URI=mongodb://localhost:27017/sebsa_assessment
+JWT_SECRET=replace-with-a-long-random-secret
+RESEND_API_KEY=re_xxxxxxxxx
 ```
 
-### 4. Run database migrations
-```bash
-npm run db:migrate
-```
-
-### 5. (Optional) Seed initial data
+### 4. (Optional) Seed initial data
 ```bash
 npm run db:seed
 ```
 
-### 6. Start the development server
+The seed script creates the default administrator, sample employees, an active
+assessment cycle, and questions when they do not already exist.
+
+### 5. Start the development server
 ```bash
 npm run dev
 ```
@@ -57,7 +57,7 @@ src/
 │   │   ├── employees/          # Employee list management (FR-12)
 │   │   ├── cycles/             # Start a cycle / send assessment (FR-13)
 │   │   └── tracker/            # Completion tracker dashboard (FR-15)
-│   └── api/                    # Next.js API routes (backend)
+│   └── api/                    # Next.js Route Handlers (backend)
 │       ├── auth/               # Login / logout
 │       ├── questions/          # CRUD questions
 │       ├── employees/          # CRUD employees
@@ -75,16 +75,14 @@ src/
 │
 ├── lib/
 │   ├── auth/                   # bcrypt hashing + JWT sign/verify
-│   ├── db/                     # Drizzle ORM connection (re-export)
+│   ├── db/                     # Mongoose connection (re-export)
 │   ├── email/                  # Resend: invitation + certificate emails
 │   ├── pdf/                    # pdf-lib certificate generator
 │   └── utils/                  # Shuffle, scoring, helpers
 │
 ├── db/
-│   ├── index.ts                # Drizzle connection + pool
-│   ├── schema.ts               # All table definitions
-│   ├── migrations/             # Auto-generated SQL migrations
-│   └── seeds/                  # Seed scripts
+│   ├── index.ts                # Mongoose connection and connection cache
+│   └── models/                 # Mongoose models and schemas
 │
 ├── types/index.ts              # Shared TypeScript types
 ├── schemas/index.ts            # Zod validation schemas
@@ -112,8 +110,8 @@ tests/
 | Layer | Technology | Reason |
 |---|---|---|
 | Frontend | Next.js 14 (App Router) + Tailwind CSS | Simple, modern UI; single deployable |
-| Backend | Next.js API Routes (TypeScript) | One language across the stack |
-| Database | PostgreSQL + Drizzle ORM | Relational; managed hosting removes ops overhead |
+| Backend | Next.js App Router Route Handlers (TypeScript) | One language across the stack |
+| Database | MongoDB + Mongoose | Document database with typed application models |
 | Auth | bcryptjs + JWT (jose) | Company email+password; SSO-ready later |
 | PDF | pdf-lib | Server-side, no browser needed |
 | Email | Resend | Reliable delivery, SPF/DKIM support |
@@ -129,7 +127,7 @@ tests/
 | FR-03/04 | Random + shuffled 10 questions | `lib/utils/index.ts` — `selectRandomQuestions`, `shuffle` |
 | FR-06 | Auto-scoring | `lib/utils/index.ts` — `scoreAttempt` |
 | FR-07/08 | Certificate PDF + email | `lib/pdf`, `lib/email` |
-| FR-10 | One attempt per cycle | `api/attempts` — duplicate check |
+| FR-10 | Attempt policy per cycle | `api/attempts` — attempt and invitation checks |
 | FR-11 | Question bank management | `api/questions` |
 | FR-12 | Employee management | `api/employees` |
 | FR-13 | Start cycle + bulk email | `api/cycles` |
@@ -140,7 +138,9 @@ tests/
 
 ## Environment Variables
 
-See [`.env.example`](.env.example) for all required variables.
+The application reads environment variables from `.env.local`. The required
+settings are `MONGODB_URI`, `JWT_SECRET`, and `RESEND_API_KEY`. Additional
+email configuration may be required by the Resend integration.
 
 ---
 

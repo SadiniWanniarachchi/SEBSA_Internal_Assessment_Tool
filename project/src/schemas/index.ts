@@ -21,23 +21,23 @@ export const questionSchema = z.object({
 export type QuestionInput = z.infer<typeof questionSchema>;
 
 // ─── Employees ────────────────────────────────────────────────────────────────
+// Only Name + Email are required for employee creation.
+// The initial password is set server-side via EMPLOYEE_DEFAULT_PASSWORD env var.
 export const employeeSchema = z.object({
-  fullName:   z.string().min(2, "Full name must be at least 2 characters"),
-  email:      z.string().email("Please enter a valid email address"),
-  department: z.string().optional(),
-  password:   z.string().min(8, "Password must be at least 8 characters"),
-  status:     z.enum(["active", "inactive"]).default("active"),
+  fullName: z.string().min(2, "Full name must be at least 2 characters"),
+  email:    z.string().email("Please enter a valid email address"),
+  status:   z.enum(["active", "inactive"]).default("active"),
 });
 export type EmployeeInput = z.infer<typeof employeeSchema>;
 
-export const updateEmployeeSchema = employeeSchema.partial().omit({ password: true }).extend({
-  password: z.string().min(8).optional(), // password is optional on update
+export const updateEmployeeSchema = employeeSchema.partial().extend({
+  password: z.string().min(8).optional(),
 });
 export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
 
 // ─── Assessment Cycles ────────────────────────────────────────────────────────
 export const createCycleSchema = z.object({
-  label: z.string().min(3, "Cycle label must be at least 3 characters"), // e.g. "2026 H2"
+  label:        z.string().min(3, "Cycle label must be at least 3 characters"),
   passingScore: z.number().int().min(0).max(10).default(8),
 });
 export type CreateCycleInput = z.infer<typeof createCycleSchema>;
@@ -46,7 +46,7 @@ export type CreateCycleInput = z.infer<typeof createCycleSchema>;
 export const submitAssessmentSchema = z.object({
   cycleId: z.string().min(1, "Cycle ID is required"),
   answers: z.record(
-    z.string(), // question id (as string key in JSON)
+    z.string(),
     z.enum(["a", "b", "c", "d"])
   ).refine(
     (answers) => Object.keys(answers).length === 10,

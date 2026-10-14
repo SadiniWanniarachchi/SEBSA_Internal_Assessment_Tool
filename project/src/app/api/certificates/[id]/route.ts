@@ -32,7 +32,9 @@ export async function GET(
     return NextResponse.json({ success: false, error: "Certificate not found" }, { status: 404 });
   }
 
-  const attempt = await Attempt.findById(cert.attemptId).lean();
+  const attempt = await Attempt.findById(cert.attemptId)
+    .select("employeeId cycleId score submittedAt")
+    .lean();
   if (!attempt) {
     return NextResponse.json({ success: false, error: "Attempt not found" }, { status: 404 });
   }
@@ -42,11 +44,12 @@ export async function GET(
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
-  const employee = await Employee.findById(attempt.employeeId).lean();
-  const cycle    = await AssessmentCycle.findById(attempt.cycleId).lean();
-
-  // Total completed attempts for this employee = cert sequence number
-  const attemptNumber = await Attempt.countDocuments({ employeeId: attempt.employeeId });
+  // Run all three independent queries in parallel
+  const [employee, cycle, attemptNumber] = await Promise.all([
+    Employee.findById(attempt.employeeId).select("fullName email").lean(),
+    AssessmentCycle.findById(attempt.cycleId).select("label").lean(),
+    Attempt.countDocuments({ employeeId: attempt.employeeId }),
+  ]);
 
   const pdfBuffer = await generateCertificate({
     employeeName:      employee?.fullName       || "SEBSA Employee",

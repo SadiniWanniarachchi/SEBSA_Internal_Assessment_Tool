@@ -17,7 +17,15 @@ export async function POST(req: NextRequest) {
   }
 
   const { email, password } = parsed.data;
-  await connectDB();
+  try {
+    await connectDB();
+  } catch (dbErr) {
+    console.error("[Login] DB connection failed:", (dbErr as Error).message);
+    return NextResponse.json(
+      { success: false, error: "Service temporarily unavailable. Please try again in a moment." },
+      { status: 503 }
+    );
+  }
 
   // Try employee collection first (case insensitive email search)
   const employee = await Employee.findOne({ email: email.toLowerCase() }).lean();
@@ -116,7 +124,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Invalid session" }, { status: 401 });
   }
 
-  await connectDB();
+  try {
+    await connectDB();
+  } catch (dbErr) {
+    console.error("[Session] DB connection failed:", (dbErr as Error).message);
+    return NextResponse.json(
+      { success: false, error: "Service temporarily unavailable." },
+      { status: 503 }
+    );
+  }
 
   if (payload.role === "employee") {
     const employee = await Employee.findById(payload.sub).select("-passwordHash").lean();
@@ -124,27 +140,40 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    const activeCycle = await AssessmentCycle.findOne({ status: "active" }).lean();
-    let pendingAssessment = false;
-    let currentAttempt = null;
+    // Run independent queries in parallel to cut round-trip latency
+    const [activeCycle, allAttempts] = await Promise.all([
+      AssessmentCycle.findOne({ status: "active" }).lean(),
+      Attempt.find({ employeeId: employee._id })
+        .select("_id cycleId score submittedAt")
+        .populate({ path: "cycleId", select: "label" })
+        .lean(),
+    ]);
 
-    if (activeCycle) {
-      currentAttempt = await Attempt.findOne({
-        employeeId: employee._id,
-        cycleId: activeCycle._id,
-      }).lean();
-      pendingAssessment = !currentAttempt;
-    }
-
-    // Fetch employee certificates with attempt + cycle data for history display
-    const allAttempts = await Attempt.find({ employeeId: employee._id })
-      .populate({ path: "cycleId", select: "label" })
-      .lean();
+    // currentAttempt and certificates depend on the results above — run them in parallel too
     const attemptIds = allAttempts.map(a => a._id);
-    const certificates = await Certificate.find({ attemptId: { $in: attemptIds } }).lean();
+    const [latestAttempt, certificates] = await Promise.all([
+      activeCycle
+        ? Attempt.findOne({ employeeId: employee._id, cycleId: activeCycle._id })
+            .sort({ attemptNumber: -1 })
+            .select("_id score submittedAt isFinal passed attemptNumber")
+            .lean()
+        : Promise.resolve(null),
+      Certificate.find({ attemptId: { $in: attemptIds } })
+        .select("_id certificateNumber issuedAt attemptId")
+        .lean(),
+    ]);
+
+    // pendingAssessment: true when no attempt started yet
+    const pendingAssessment = activeCycle ? !latestAttempt : false;
+    // canRetry: attempt 1 done but not final (score < RETRY_THRESHOLD, retry available)
+    const canRetry = !!(latestAttempt && !latestAttempt.isFinal);
+    const currentAttempt = latestAttempt;
+
+    // O(1) lookup instead of O(n²) nested scan
+    const attemptById = new Map(allAttempts.map(a => [a._id.toString(), a]));
 
     const certList = certificates.map(c => {
-      const attempt = allAttempts.find(a => a._id.toString() === c.attemptId.toString());
+      const attempt = attemptById.get(c.attemptId.toString());
       return {
         id: c._id.toString(),
         certificateNumber: c.certificateNumber,
@@ -174,9 +203,13 @@ export async function GET(req: NextRequest) {
           deadline: "November 30, 2026",
         } : null,
         pendingAssessment,
+        canRetry,
         currentAttempt: currentAttempt ? {
           id: currentAttempt._id.toString(),
           score: currentAttempt.score,
+          passed: currentAttempt.passed,
+          isFinal: currentAttempt.isFinal,
+          attemptNumber: currentAttempt.attemptNumber,
           submittedAt: currentAttempt.submittedAt,
         } : null,
         certificates: certList,

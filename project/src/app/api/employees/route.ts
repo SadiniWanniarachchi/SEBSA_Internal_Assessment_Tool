@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ success: true, data: formatted });
 }
 
-// POST /api/employees — create a new employee (admin only)
+// POST /api/employees — create employee (name + email only, admin only)
 export async function POST(req: NextRequest) {
   const token = req.cookies.get("token")?.value;
   if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
@@ -53,12 +53,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const passwordHash = await hashPassword(parsed.data.password);
+  // Password is never set by the admin form; use the company-standard default
+  // configured via EMPLOYEE_DEFAULT_PASSWORD, falling back to the employee's
+  // email address so they can always log in with credentials they already know.
+  const defaultPassword = process.env.EMPLOYEE_DEFAULT_PASSWORD ?? parsed.data.email.toLowerCase();
+  const passwordHash = await hashPassword(defaultPassword);
   const employee = await Employee.create({
-    fullName: parsed.data.fullName,
-    email: parsed.data.email.toLowerCase(),
-    department: parsed.data.department || "Enterprise Consulting",
-    status: parsed.data.status,
+    fullName:  parsed.data.fullName,
+    email:     parsed.data.email.toLowerCase(),
+    status:    parsed.data.status,
     passwordHash,
   });
 
