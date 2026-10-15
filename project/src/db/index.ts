@@ -1,20 +1,14 @@
 import mongoose from "mongoose";
 import dns from "node:dns";
 
-// Force IPv4 DNS resolution and use public DNS for MongoDB SRV records on Windows.
+// Force IPv4 DNS resolution to avoid slow SRV lookups on Windows
 try {
   dns.setDefaultResultOrder("ipv4first");
   dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
   dns.promises.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
 } catch {
-  // Ignore in environments where DNS configuration is restricted.
+  // Ignore in restricted environments
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MongoDB connection — singleton pattern for Next.js
-// Next.js hot-reloads modules in dev, so we cache the connection on globalThis
-// to avoid creating a new connection on every request.
-// ─────────────────────────────────────────────────────────────────────────────
 
 declare global {
   // eslint-disable-next-line no-var
@@ -32,26 +26,33 @@ function getMongoUri(): string {
   return uri;
 }
 
+const CONNECT_OPTS: mongoose.ConnectOptions = {
+  bufferCommands: false,
+  maxPoolSize:    10,
+  minPoolSize:    2,          // keep 2 connections warm so first request is fast
+  serverSelectionTimeoutMS: 8000,
+  socketTimeoutMS:          45000,
+  connectTimeoutMS:         10000,
+};
+
 export async function connectDB(): Promise<typeof mongoose> {
-  if (mongoose.connection.readyState === 1) {
-    // Already connected — reuse the existing connection
-    return mongoose;
-  }
+  // Already connected — fast path
+  if (mongoose.connection.readyState === 1) return mongoose;
 
-  if (process.env.NODE_ENV === "development") {
-    // In development: cache on globalThis to survive hot reloads
-    if (!globalThis._mongooseConnection) {
-      globalThis._mongooseConnection = mongoose.connect(getMongoUri(), {
-        bufferCommands: false,
+  // Reuse the cached promise across hot reloads (dev) and concurrent requests (prod).
+  // Caching the promise means two simultaneous requests both await the same connection
+  // attempt instead of each calling mongoose.connect(), which throws on a second call.
+  if (!globalThis._mongooseConnection) {
+    globalThis._mongooseConnection = mongoose
+      .connect(getMongoUri(), CONNECT_OPTS)
+      .catch((err) => {
+        // Clear cache on failure so the next request retries
+        globalThis._mongooseConnection = undefined;
+        throw err;
       });
-    }
-    return globalThis._mongooseConnection;
   }
 
-  // In production: always create a fresh connection
-  return mongoose.connect(getMongoUri(), {
-    bufferCommands: false,
-  });
+  return globalThis._mongooseConnection;
 }
 
 export default connectDB;

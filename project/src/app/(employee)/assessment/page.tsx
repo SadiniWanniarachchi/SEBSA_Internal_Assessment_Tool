@@ -19,7 +19,6 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import CheckCircleOutlinedIcon from "@mui/icons-material/CheckCircleOutlined";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import DownloadIcon from "@mui/icons-material/Download";
-import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import AdjustIcon from "@mui/icons-material/Adjust";
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
@@ -30,14 +29,12 @@ import VerifiedIcon from "@mui/icons-material/Verified";
 import CardMembershipIcon from "@mui/icons-material/CardMembership";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
-import StarIcon from "@mui/icons-material/Star";
-import SecurityIcon from "@mui/icons-material/Security";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import { Navbar } from "@/components/Navbar";
 
-const P = "#6343D8";
-const PD = "#5332C7";
+const P = "#3E0B78";
+const PD = "#2E0858";
 
 interface Option {
   key: "a" | "b" | "c" | "d";
@@ -68,11 +65,10 @@ interface CelebrationData {
   employeeName: string;
   employeeEmail: string;
   cycleLabel: string;
-  timeTakenFormatted: string;
   certificateNumber: string;
   certificateId: string;
-  categories: { name: string; percentage: number }[];
-  masteryLevel: string;
+  passingScore: number;
+  attemptNumber?: number;
   perQuestion?: PerQuestionResult[];
 }
 
@@ -82,12 +78,26 @@ export default function AssessmentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Invitation gate states
+  const [invitationExpired, setInvitationExpired] = useState(false);
+  const [expiredAt, setExpiredAt] = useState<string | null>(null);
+  const [notInvited, setNotInvited] = useState(false);
+
   const [user, setUser] = useState<any>(null);
   const [cycle, setCycle] = useState<any>(null);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, "a" | "b" | "c" | "d">>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attemptNumber, setAttemptNumber] = useState<1 | 2>(1);
+
+  // Retry banner (shown when loading page for attempt 2)
+  const [canRetryBanner, setCanRetryBanner] = useState(false);
+  const [attempt1Data, setAttempt1Data] = useState<{ score: number; total: number } | null>(null);
+
+  // Post-submission retry-available screen (attempt 1 done, score < threshold)
+  const [retryAvailable, setRetryAvailable] = useState(false);
+  const [retryScore, setRetryScore] = useState<{ score: number; total: number } | null>(null);
 
   const [completed, setCompleted] = useState(false);
   const [celebrationData, setCelebrationData] = useState<CelebrationData | null>(null);
@@ -98,16 +108,35 @@ export default function AssessmentPage() {
   useEffect(() => {
     async function initAssessment() {
       try {
-        const authRes = await fetch("/api/auth");
-        const authJson = await authRes.json();
+        const [authRes, assessRes] = await Promise.all([
+          fetch("/api/auth"),
+          fetch("/api/assessment"),
+        ]);
+        const [authJson, assessJson] = await Promise.all([
+          authRes.json(),
+          assessRes.json(),
+        ]);
+
         if (!authJson.success || authJson.data.user.role !== "employee") {
           router.push("/login");
           return;
         }
         setUser(authJson.data.user);
 
-        const assessRes = await fetch("/api/assessment");
-        const assessJson = await assessRes.json();
+        // Invitation not found
+        if (!assessJson.success && assessJson.invitationError) {
+          setNotInvited(true);
+          setLoading(false);
+          return;
+        }
+
+        // Invitation expired
+        if (!assessJson.success && assessJson.invitationExpired) {
+          setInvitationExpired(true);
+          setExpiredAt(assessJson.expiredAt ?? null);
+          setLoading(false);
+          return;
+        }
 
         if (!assessJson.success) {
           setError(assessJson.error || "Failed to load assessment.");
@@ -115,30 +144,35 @@ export default function AssessmentPage() {
           return;
         }
 
+        // Assessment already finalized (Cases A + B from API)
         if (assessJson.alreadyCompleted) {
           setCompleted(true);
           const attempt = assessJson.attempt;
           setCelebrationData({
             score: attempt.score,
-            total: 10,
-            percentage: Math.round((attempt.score / 10) * 100),
-            passed: attempt.score >= 8,
+            total: attempt.total ?? 10,
+            percentage: Math.round((attempt.score / (attempt.total ?? 10)) * 100),
+            passed: attempt.passed ?? attempt.score >= (assessJson.cycle?.passingScore ?? 8),
             employeeName: authJson.data.user.fullName,
             employeeEmail: authJson.data.user.email,
-            cycleLabel: assessJson.cycle?.label || "2026 H2 Knowledge Assessment",
-            timeTakenFormatted: "14m 32s",
-            certificateNumber: "CR-26-081",
-            certificateId: attempt.id,
-            categories: [
-              { name: "Cloud Architecture", percentage: 100 },
-              { name: "Compliance & Governance", percentage: 100 },
-              { name: "Security & Data Privacy", percentage: 92 },
-              { name: "System Integration", percentage: 80 },
-            ],
-            masteryLevel: attempt.score >= 9 ? "Distinction" : "Proficient",
+            cycleLabel: assessJson.cycle?.label || "Assessment",
+            certificateNumber: attempt.certificateNumber ?? "",
+            certificateId: attempt.id ?? attempt._id ?? "",
+            passingScore: assessJson.cycle?.passingScore ?? 8,
+            attemptNumber: attempt.attemptNumber ?? 1,
+            perQuestion: attempt.perQuestion,
           });
           setLoading(false);
           return;
+        }
+
+        // Retry available (Case C: attempt 1 done, score < threshold, same questions)
+        if (assessJson.canRetry) {
+          setCanRetryBanner(true);
+          setAttempt1Data(assessJson.attempt1 ?? null);
+          setAttemptNumber(2);
+        } else {
+          setAttemptNumber(assessJson.attemptNumber ?? 1);
         }
 
         setCycle(assessJson.cycle);
@@ -187,21 +221,154 @@ export default function AssessmentPage() {
       const res = await fetch("/api/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cycleId: cycle.id, answers, timeTakenFormatted: "14m 32s" }),
+        body: JSON.stringify({ cycleId: cycle.id, answers }),
       });
       const json = await res.json();
       setIsSubmitting(false);
       if (!json.success) {
-        setError(json.error || "Failed to submit assessment.");
+        if (json.invitationExpired) {
+          setInvitationExpired(true);
+        } else {
+          setError(json.error || "Failed to submit assessment.");
+        }
         return;
       }
-      setCelebrationData(json.data);
+      const data = json.data;
+      // Attempt 1, score below retry threshold → retry available screen
+      if (!data.isFinal) {
+        setRetryScore({ score: data.score, total: data.total ?? 10 });
+        setRetryAvailable(true);
+        return;
+      }
+      // Final attempt → celebration/result screen
+      setCelebrationData({
+        score: data.score,
+        total: data.total ?? 10,
+        percentage: data.percentage ?? Math.round((data.score / (data.total ?? 10)) * 100),
+        passed: data.passed,
+        employeeName: data.employeeName,
+        employeeEmail: data.employeeEmail,
+        cycleLabel: data.cycleLabel,
+        certificateNumber: data.certificateNumber ?? "",
+        certificateId: data.certificateId ?? data.attemptId ?? "",
+        passingScore: data.passingScore ?? 8,
+        attemptNumber: data.attemptNumber ?? 1,
+        perQuestion: data.perQuestion,
+      });
       setCompleted(true);
     } catch {
       setIsSubmitting(false);
       setError("Submission error. Please check your connection and try again.");
     }
   };
+
+  const handleCertificateDownload = async () => {
+    if (!celebrationData) return;
+
+    try {
+      const response = await fetch(
+        `/api/certificates/${celebrationData.certificateId || celebrationData.certificateNumber}`
+      );
+      if (!response.ok) {
+        throw new Error("Certificate download failed");
+      }
+
+      const pdfBlob = await response.blob();
+      const downloadUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `SEBSA_Certificate_${celebrationData.certificateNumber.substring(0, 8)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (downloadError) {
+      console.error("Certificate download error:", downloadError);
+      setError("Unable to download the certificate. Please try again.");
+    }
+  };
+
+  // ── Invitation expired ────────────────────────────────────────────────────
+  if (invitationExpired) {
+    const formattedExpiry = expiredAt
+      ? new Date(expiredAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+      : null;
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#F9F8FF", p: 3 }}>
+        <Box sx={{ width: "100%", maxWidth: 460, bgcolor: "white", borderRadius: "24px", border: "1px solid #FCE8E8", boxShadow: "0 20px 60px rgba(0,0,0,0.08)", p: { xs: 4, sm: 5 }, textAlign: "center" }}>
+          <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center", mx: "auto", mb: 2.5 }}>
+            <LockOutlinedIcon sx={{ color: "#EF4444", fontSize: 28 }} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#292634", mb: 1 }}>Invitation Expired</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: formattedExpiry ? 1 : 3.5, lineHeight: 1.65 }}>
+            Your assessment invitation has expired. Please contact HR or your Admin to receive a new invitation link.
+          </Typography>
+          {formattedExpiry && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 3 }}>
+              Expired on {formattedExpiry}
+            </Typography>
+          )}
+          <Button fullWidth variant="contained" size="large" onClick={() => router.push("/dashboard")}
+            sx={{ background: P, boxShadow: `0 6px 16px ${alpha(P, 0.35)}`, borderRadius: "14px", fontWeight: 700 }}>
+            Back to Dashboard
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── Not invited ───────────────────────────────────────────────────────────
+  if (notInvited) {
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#F9F8FF", p: 3 }}>
+        <Box sx={{ width: "100%", maxWidth: 460, bgcolor: "white", borderRadius: "24px", border: `1px solid ${alpha(P, 0.15)}`, boxShadow: "0 20px 60px rgba(0,0,0,0.08)", p: { xs: 4, sm: 5 }, textAlign: "center" }}>
+          <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: alpha(P, 0.08), display: "flex", alignItems: "center", justifyContent: "center", mx: "auto", mb: 2.5 }}>
+            <AssignmentTurnedInOutlinedIcon sx={{ color: P, fontSize: 28 }} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#292634", mb: 1 }}>No Active Assessment</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5, lineHeight: 1.65 }}>
+            You have not been invited to the current assessment cycle. Please contact HR or your Admin if you believe this is an error.
+          </Typography>
+          <Button fullWidth variant="contained" size="large" onClick={() => router.push("/dashboard")}
+            sx={{ background: P, boxShadow: `0 6px 16px ${alpha(P, 0.35)}`, borderRadius: "14px", fontWeight: 700 }}>
+            Back to Dashboard
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── Retry available (after submitting attempt 1 with score < threshold) ───
+  if (retryAvailable && retryScore) {
+    const pct = Math.round((retryScore.score / retryScore.total) * 100);
+    return (
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#F9F8FF", p: 3 }}>
+        <Box sx={{ width: "100%", maxWidth: 480, bgcolor: "white", borderRadius: "24px", border: `1px solid ${alpha(P, 0.1)}`, boxShadow: "0 20px 60px rgba(0,0,0,0.08)", p: { xs: 4, sm: 5 }, textAlign: "center" }}>
+          <Box sx={{ width: 56, height: 56, borderRadius: "16px", bgcolor: "#FFF7ED", display: "flex", alignItems: "center", justifyContent: "center", mx: "auto", mb: 2.5 }}>
+            <EmojiEventsIcon sx={{ color: "#F59E0B", fontSize: 28 }} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#292634", mb: 1 }}>Attempt 1 Complete</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.65 }}>
+            You scored{" "}
+            <Box component="strong" sx={{ color: "#292634" }}>{retryScore.score}/{retryScore.total} ({pct}%)</Box>{" "}
+            on your first attempt. The pass mark is {cycle?.passingScore ?? 8}/10.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5, lineHeight: 1.65 }}>
+            You have one more attempt available using the <strong>same questions</strong>. Take your time to review before starting.
+          </Typography>
+          <Button fullWidth variant="contained" size="large"
+            onClick={() => { setRetryAvailable(false); window.location.reload(); }}
+            sx={{ background: `linear-gradient(135deg, ${PD}, ${P})`, boxShadow: `0 6px 16px ${alpha(P, 0.35)}`, borderRadius: "14px", fontWeight: 700, mb: 1.5 }}>
+            Start Second Attempt
+          </Button>
+          <Button fullWidth variant="outlined" size="large" onClick={() => router.push("/dashboard")}
+            sx={{ borderRadius: "14px", fontWeight: 600, borderColor: alpha(P, 0.3), color: P }}>
+            Back to Dashboard
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -311,6 +478,21 @@ export default function AssessmentPage() {
             alignItems: "center",
           }}
         >
+          <Box sx={{ width: "100%", mb: 2, textAlign: "left" }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: P,
+                fontWeight: 600,
+                cursor: "pointer",
+                "&:hover": { textDecoration: "underline" },
+              }}
+              onClick={() => router.push("/dashboard")}
+            >
+              Return to Dashboard →
+            </Typography>
+          </Box>
+
           {/* Trophy with glow */}
           <Box sx={{ position: "relative", mb: 3 }}>
             <Box
@@ -401,7 +583,7 @@ export default function AssessmentPage() {
             sx={{
               width: "100%",
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "7fr 5fr" },
+              gridTemplateColumns: "1fr",
               gap: { xs: 2, md: 3 },
             }}
           >
@@ -427,9 +609,9 @@ export default function AssessmentPage() {
                   Overall Score
                 </Typography>
                 <Chip
-                  icon={<StarIcon sx={{ fontSize: "0.75rem !important" }} />}
-                  label="Passed · Min 80%"
-                  color="success"
+                  icon={cd.passed ? <CheckCircleIcon sx={{ fontSize: "0.75rem !important" }} /> : <CancelIcon sx={{ fontSize: "0.75rem !important" }} />}
+                  label={cd.passed ? "PASS" : "FAIL"}
+                  color={cd.passed ? "success" : "error"}
                   size="small"
                   sx={{
                     fontSize: { xs: "0.6rem", sm: "0.65rem" },
@@ -475,38 +657,11 @@ export default function AssessmentPage() {
                 />
               </Box>
 
-              {/* Proficiency banner */}
-              <Box
-                sx={{
-                  mt: 2.5,
-                  bgcolor: alpha(P, 0.04),
-                  border: `1px solid ${alpha(P, 0.12)}`,
-                  borderRadius: "16px",
-                  p: { xs: 1.75, sm: 2 },
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 1.5,
-                }}
-              >
-                <SecurityIcon sx={{ color: P, fontSize: { xs: 18, sm: 20 }, mt: 0.15, flexShrink: 0 }} />
-                <Box>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ color: "#292634", fontSize: { xs: "0.78rem", sm: "0.82rem" }, fontWeight: 700 }}
-                  >
-                    Executive Proficiency Achieved
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>
-                    Top 5th percentile among senior business architecture evaluations in Sri Lanka HQ.
-                  </Typography>
-                </Box>
-              </Box>
-
-              {/* 3 metrics */}
+              {/* Assessment metrics */}
               <Box
                 sx={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gridTemplateColumns: "repeat(2, 1fr)",
                   gap: { xs: 1, sm: 2 },
                   mt: 3,
                   pt: 3,
@@ -514,12 +669,6 @@ export default function AssessmentPage() {
                 }}
               >
                 {[
-                  {
-                    icon: <AccessTimeOutlinedIcon sx={{ fontSize: 13 }} />,
-                    label: "Time Taken",
-                    value: cd.timeTakenFormatted,
-                    sub: "Limit: 30 mins",
-                  },
                   {
                     icon: <AdjustIcon sx={{ fontSize: 13 }} />,
                     label: "Accuracy",
@@ -529,7 +678,7 @@ export default function AssessmentPage() {
                   {
                     icon: <AssignmentTurnedInOutlinedIcon sx={{ fontSize: 13 }} />,
                     label: "Attempts",
-                    value: "Attempt 1",
+                    value: `Attempt ${cd.attemptNumber ?? 1}`,
                     sub: "Final attempt",
                   },
                 ].map((m) => (
@@ -573,121 +722,6 @@ export default function AssessmentPage() {
               </Box>
             </Box>
 
-            {/* RIGHT: Competency breakdown */}
-            <Box
-              sx={{
-                bgcolor: "white",
-                borderRadius: "24px",
-                border: `1px solid ${alpha(P, 0.08)}`,
-                boxShadow: `0 8px 32px ${alpha(P, 0.07)}`,
-                p: { xs: 3, sm: 4 },
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    pb: 2,
-                    borderBottom: `1px solid ${alpha(P, 0.08)}`,
-                    mb: 3,
-                  }}
-                >
-                  <Typography
-                    variant="overline"
-                    sx={{ color: "text.secondary", fontSize: "0.62rem", letterSpacing: "0.1em" }}
-                  >
-                    Competency Breakdown
-                  </Typography>
-                  <Typography
-                    variant="overline"
-                    sx={{ color: "text.secondary", fontSize: "0.62rem" }}
-                  >
-                    Score
-                  </Typography>
-                </Box>
-
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
-                  {cd.categories.map((cat) => (
-                    <Box key={cat.name}>
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          mb: 0.75,
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 500, fontSize: { xs: "0.75rem", sm: "0.8rem" }, color: "#292634" }}
-                        >
-                          {cat.name}
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 700, fontSize: { xs: "0.75rem", sm: "0.8rem" }, color: P }}
-                        >
-                          {cat.percentage}%
-                        </Typography>
-                      </Box>
-                      <Box
-                        sx={{
-                          width: "100%",
-                          height: 6,
-                          bgcolor: alpha(P, 0.1),
-                          borderRadius: "99px",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: `${cat.percentage}%`,
-                            height: "100%",
-                            background: `linear-gradient(90deg, ${PD}, ${P})`,
-                            borderRadius: "99px",
-                          }}
-                        />
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-
-              {/* Mastery badge */}
-              <Box
-                sx={{
-                  mt: 3,
-                  pt: 2.5,
-                  borderTop: `1px solid ${alpha(P, 0.08)}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ fontWeight: 500, fontSize: { xs: "0.75rem", sm: "0.8rem" } }}
-                >
-                  Mastery Level
-                </Typography>
-                <Chip
-                  label={cd.masteryLevel}
-                  sx={{
-                    bgcolor: alpha(P, 0.1),
-                    color: P,
-                    fontWeight: 700,
-                    fontSize: { xs: "0.68rem", sm: "0.72rem" },
-                    height: 26,
-                  }}
-                />
-              </Box>
-            </Box>
           </Box>
 
           {/* Certificate action row */}
@@ -766,9 +800,7 @@ export default function AssessmentPage() {
                 variant="contained"
                 size="small"
                 startIcon={<DownloadIcon />}
-                component="a"
-                href={`/api/certificates/${cd.certificateId || cd.certificateNumber}`}
-                download={`SEBSA_Certificate_${cd.certificateNumber.substring(0, 8)}.pdf`}
+                onClick={handleCertificateDownload}
                 sx={{
                   borderRadius: "10px",
                   fontSize: { xs: "0.72rem", sm: "0.78rem" },
@@ -996,38 +1028,6 @@ export default function AssessmentPage() {
             </Box>
           )}
 
-          {/* Footer metadata */}
-          <Box
-            sx={{
-              width: "100%",
-              mt: 3,
-              display: "flex",
-              flexDirection: { xs: "column", sm: "row" },
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 1,
-              px: 0.5,
-            }}
-          >
-            <Typography variant="caption" color="text.secondary">
-              Recipient: {cd.employeeName}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Account: {cd.employeeEmail}
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                color: P,
-                fontWeight: 600,
-                cursor: "pointer",
-                "&:hover": { textDecoration: "underline" },
-              }}
-              onClick={() => router.push("/dashboard")}
-            >
-              Return to Dashboard →
-            </Typography>
-          </Box>
         </Box>
       </Box>
     );
@@ -1101,6 +1101,34 @@ export default function AssessmentPage() {
             Back to Dashboard
           </Button>
         </Box>
+
+        {/* Retry banner (attempt 2) */}
+        {canRetryBanner && attempt1Data && (
+          <Box
+            sx={{
+              mb: { xs: 2, sm: 2.5 },
+              px: 2,
+              py: 1.5,
+              borderRadius: "14px",
+              bgcolor: "#FFF7ED",
+              border: "1px solid #FED7AA",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 1.5,
+            }}
+          >
+            <EmojiEventsIcon sx={{ color: "#F59E0B", fontSize: 20, mt: 0.1, flexShrink: 0 }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.82rem", fontWeight: 700, color: "#92400E", mb: 0.25 }}>
+                Second Attempt — Same Questions
+              </Typography>
+              <Typography sx={{ fontSize: "0.78rem", color: "#92400E", lineHeight: 1.5 }}>
+                You scored <strong>{attempt1Data.score}/{attempt1Data.total}</strong> on your first attempt.
+                This is your final attempt. The same questions are shown — answer carefully.
+              </Typography>
+            </Box>
+          </Box>
+        )}
 
         {/* Sub-header */}
         <Box

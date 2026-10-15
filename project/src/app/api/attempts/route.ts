@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { submitAssessmentSchema } from "@/schemas";
 import { scoreAttempt } from "@/lib/utils";
 import { generateCertificate } from "@/lib/pdf";
@@ -12,21 +12,17 @@ import {
   Employee,
   Question,
   Certificate,
+  Invitation,
 } from "@/db/models";
 
+// Score threshold: below this value a retry is permitted (first attempt only).
+const RETRY_THRESHOLD = 6;
+
 // ─── POST /api/attempts ───────────────────────────────────────────────────────
-// Employee submits their completed assessment (FR-05, FR-06, FR-07, FR-08, FR-10)
 export async function POST(req: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "employee") {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-  }
-
-  const employeeId = payload.sub;
+  const employeeId = requireRole(req, "employee");
+  if (!employeeId) return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
 
   // ── Validate body ─────────────────────────────────────────────────────────
   const body = await req.json();
@@ -39,129 +35,227 @@ export async function POST(req: NextRequest) {
   }
 
   const { cycleId, answers } = parsed.data;
+  const questionIds = Object.keys(answers);
 
   await connectDB();
 
-  // ── FR-10: One attempt per cycle check ────────────────────────────────────
-  const existing = await Attempt.findOne({ employeeId, cycleId }).lean();
-  if (existing) {
+  // ── Server-side invitation expiry check ───────────────────────────────────
+  const invitation = await Invitation.findOne({ employeeId, cycleId }).lean();
+  if (!invitation) {
     return NextResponse.json(
-      { success: false, error: "You have already submitted this assessment." },
+      { success: false, error: "No valid invitation found for this assessment cycle." },
+      { status: 403 }
+    );
+  }
+  const now = new Date();
+  if (invitation.expiresAt < now && invitation.status !== "completed") {
+    return NextResponse.json(
+      {
+        success: false,
+        invitationExpired: true,
+        error: "Your assessment invitation has expired. Please contact HR for a new invitation.",
+      },
+      { status: 403 }
+    );
+  }
+
+  // ── Run pre-checks in parallel ────────────────────────────────────────────
+  const [existingAttempts, cycle] = await Promise.all([
+    Attempt.find({ employeeId, cycleId }).sort({ attemptNumber: 1 }).lean(),
+    AssessmentCycle.findOne({ _id: cycleId, status: "active" }).lean(),
+  ]);
+
+  if (!cycle) {
+    return NextResponse.json(
+      { success: false, error: "Assessment cycle not found or not active." },
+      { status: 404 }
+    );
+  }
+
+  const attempt1 = existingAttempts.find((a) => a.attemptNumber === 1);
+  const attempt2 = existingAttempts.find((a) => a.attemptNumber === 2);
+
+  // ── Enforce attempt policy ────────────────────────────────────────────────
+  if (attempt2) {
+    return NextResponse.json(
+      { success: false, error: "You have already used both permitted attempts for this cycle." },
       { status: 409 }
     );
   }
 
-  // ── Verify active cycle ───────────────────────────────────────────────────
-  const cycle = await AssessmentCycle.findOne({ _id: cycleId, status: "active" }).lean();
-  if (!cycle) {
-    return NextResponse.json({ success: false, error: "Cycle not found or not active" }, { status: 404 });
+  if (attempt1 && attempt1.score >= RETRY_THRESHOLD) {
+    return NextResponse.json(
+      { success: false, error: "Your assessment is already finalized. No further attempts are permitted." },
+      { status: 409 }
+    );
   }
 
-  // ── Fetch the employee's selected questions (from the question IDs in answers) ──
-  const questionIds = Object.keys(answers);
-  const selectedQuestionsDB = await Question.find({ _id: { $in: questionIds } }).lean();
-  
-  // Format questions to match the utility function expectations
-  const selectedQuestions = selectedQuestionsDB.map(q => ({
-      ...q,
-      id: q._id.toString()
-  }));
+  // ── Determine attempt number and question set ─────────────────────────────
+  type LeanQuestion = {
+    _id: any;
+    questionText: string;
+    optionA: string; optionB: string; optionC: string; optionD: string;
+    correctOption: string;
+    category?: string;
+  };
+  let thisAttemptNumber: 1 | 2;
+  let selectedQuestionsDB: LeanQuestion[];
 
-  // ── FR-06: Score the attempt ──────────────────────────────────────────────
-  const score = scoreAttempt(selectedQuestions as any, answers as any);
+  if (!attempt1) {
+    // First attempt: fetch the requested questions
+    thisAttemptNumber = 1;
+    selectedQuestionsDB = await Question.find({ _id: { $in: questionIds } }).lean() as LeanQuestion[];
+  } else {
+    // Second attempt: MUST reuse the exact same questions as attempt 1
+    thisAttemptNumber = 2;
+    const originalIds = attempt1.selectedQuestionIds.map((id) => id.toString());
+    selectedQuestionsDB = await Question.find({ _id: { $in: originalIds } }).lean() as LeanQuestion[];
+    // Rewrite questionIds to match original order
+    questionIds.length = 0;
+    originalIds.forEach((id) => questionIds.push(id));
+  }
 
-  // ── Store the attempt ─────────────────────────────────────────────────────
+  // ── Score ─────────────────────────────────────────────────────────────────
+  const selectedQuestions = selectedQuestionsDB.map((q) => ({ ...q, id: q._id.toString() }));
+  const score             = scoreAttempt(selectedQuestions as any, answers as any);
+  const passingScore      = cycle.passingScore ?? 8;
+  const passed            = score >= passingScore;
+  // After attempt 2, or after attempt 1 with score >= RETRY_THRESHOLD → finalized
+  const isFinal           = thisAttemptNumber === 2 || score >= RETRY_THRESHOLD;
+
+  // ── Save attempt ──────────────────────────────────────────────────────────
   const attempt = await Attempt.create({
     employeeId,
     cycleId,
+    attemptNumber:       thisAttemptNumber,
     selectedQuestionIds: questionIds,
     answers,
     score,
+    passed,
+    isFinal,
   });
 
-  // ── FR-07: Generate certificate PDF ──────────────────────────────────────
-  const emp = await Employee.findById(employeeId).select("fullName email").lean();
-  if (!emp) {
-    return NextResponse.json({ success: false, error: "Employee not found" }, { status: 404 });
-  }
+  // ── Build per-question breakdown ─────────────────────────────────────────
+  const perQuestion = questionIds.map((qId) => {
+    const q         = selectedQuestionsDB.find((q) => q._id.toString() === qId);
+    const userKey   = (answers as Record<string, string>)[qId] || null;
+    const correctKey = q?.correctOption ?? null;
+    return {
+      questionId:   qId,
+      questionText: q?.questionText ?? "",
+      options: [
+        { key: "a" as const, text: q?.optionA ?? "" },
+        { key: "b" as const, text: q?.optionB ?? "" },
+        { key: "c" as const, text: q?.optionC ?? "" },
+        { key: "d" as const, text: q?.optionD ?? "" },
+      ],
+      userKey,
+      correctKey,
+      isCorrect: userKey !== null && userKey === correctKey,
+    };
+  });
 
-  const certificateNumber = uuidv4();
-  const pdfBuffer = await generateCertificate({
-    employeeName:      emp.fullName,
-    cycleLabel:        `SEBSA Internal Assessment — ${cycle.label}`,
+  const responseBase = {
     score,
-    dateCompleted:     new Date(),
-    certificateNumber,
-  });
+    total:          selectedQuestions.length,
+    percentage:     Math.round((score / selectedQuestions.length) * 100),
+    passed,
+    passingScore,
+    isFinal,
+    attemptNumber:  thisAttemptNumber,
+    canRetry:       !isFinal && !passed,
+    employeeName:   "",
+    employeeEmail:  "",
+    cycleLabel:     `${cycle.label} Knowledge Assessment`,
+    timeTakenFormatted: (body as any).timeTakenFormatted || "—",
+    certificateId:       "",
+    certificateNumber:   "",
+    attemptId:           attempt._id.toString(),
+    perQuestion,
+    attempt1Score:       thisAttemptNumber === 2 ? attempt1?.score ?? null : null,
+  };
 
-  // ── Store certificate record ──────────────────────────────────────────────
-  // TODO: In production, upload pdfBuffer to S3-compatible storage and store the key
-  const filePath = `certificates/${certificateNumber}.pdf`;
+  // ── Certificate: only on a final passing attempt ──────────────────────────
+  if (isFinal && passed) {
+    const [emp, attemptCount] = await Promise.all([
+      Employee.findById(employeeId).select("fullName email").lean(),
+      Attempt.countDocuments({ employeeId }),
+    ]);
 
-  const cert = await Certificate.create({
-    attemptId:         attempt._id,
-    certificateNumber,
-    filePath,
-  });
+    if (!emp) {
+      return NextResponse.json({ success: false, error: "Employee not found." }, { status: 404 });
+    }
 
-  // ── FR-08: Email certificate to employee (CC: HR) ─────────────────────────
-  await sendCertificateEmail({
-    toEmail:           emp.email,
-    employeeName:      emp.fullName,
-    cycleLabel:        cycle.label,
-    score,
-    certificatePdf:    pdfBuffer,
-    certificateNumber,
-  }).catch((err) => {
-    // Log but don't fail the response if email fails
-    console.error("Certificate email failed:", err);
-  });
+    responseBase.employeeName  = emp.fullName;
+    responseBase.employeeEmail = emp.email;
 
-    const percentage = Math.round((score / selectedQuestions.length) * 100);
-    const passed = percentage >= 80;
+    const certificateNumber = uuidv4();
+    const completedAt       = new Date();
 
-    // Build per-question review breakdown (correct answer revealed after submission)
-    const perQuestion = questionIds.map((qId) => {
-      const q = selectedQuestionsDB.find((q) => q._id.toString() === qId);
-      const userKey = (answers as Record<string, string>)[qId] || null;
-      const correctKey = q?.correctOption ?? null;
-      return {
-        questionId:   qId,
-        questionText: q?.questionText ?? "",
-        options: [
-          { key: "a" as const, text: q?.optionA ?? "" },
-          { key: "b" as const, text: q?.optionB ?? "" },
-          { key: "c" as const, text: q?.optionC ?? "" },
-          { key: "d" as const, text: q?.optionD ?? "" },
-        ],
-        userKey,
-        correctKey,
-        isCorrect: userKey !== null && userKey === correctKey,
-      };
+    const pdfBuffer = await generateCertificate({
+      employeeName:      emp.fullName,
+      employeeEmail:     emp.email,
+      cycleLabel:        cycle.label,
+      score,
+      attemptNumber:     attemptCount,
+      dateCompleted:     completedAt,
+      certificateNumber,
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
+    const filePath = `certificates/${certificateNumber}.pdf`;
+    const cert     = await Certificate.create({
+      attemptId:         attempt._id,
+      certificateNumber,
+      filePath,
+      emailStatus:       "pending",
+    });
+
+    responseBase.certificateId     = cert._id.toString();
+    responseBase.certificateNumber = certificateNumber;
+
+    // Send certificate email; update emailStatus regardless of outcome
+    try {
+      await sendCertificateEmail({
+        toEmail:           emp.email,
+        employeeName:      emp.fullName,
+        cycleLabel:        cycle.label,
         score,
         total:             selectedQuestions.length,
-        percentage,
         passed,
-        employeeName:      emp.fullName,
-        employeeEmail:     emp.email,
-        cycleLabel:        `${cycle.label} Knowledge Assessment`,
-        timeTakenFormatted: (body as any).timeTakenFormatted || "14m 32s",
-        certificateId:     cert._id.toString(),
+        certificatePdf:    pdfBuffer,
         certificateNumber,
-        attemptId:         attempt._id.toString(),
-        categories: [
-          { name: "Cloud Architecture", percentage: 100 },
-          { name: "Compliance & Governance", percentage: 100 },
-          { name: "Security & Data Privacy", percentage: Math.min(100, Math.max(70, percentage)) },
-          { name: "System Integration", percentage: Math.min(100, Math.max(65, percentage - 10)) },
-        ],
-        masteryLevel: score >= 9 ? "Distinction" : score >= 8 ? "Merit" : "Pass",
-        perQuestion,
-      },
-    });
+      });
+      await Certificate.updateOne(
+        { _id: cert._id },
+        { $set: { emailStatus: "sent", emailSentAt: new Date() } }
+      );
+    } catch (emailErr) {
+      const errMsg = (emailErr as Error).message ?? "Unknown error";
+      console.error("[Attempts] Certificate email failed:", errMsg);
+      await Certificate.updateOne(
+        { _id: cert._id },
+        { $set: { emailStatus: "failed", emailError: errMsg } }
+      );
+    }
+  } else if (!isFinal) {
+    // Attempt 1 with score < RETRY_THRESHOLD — no certificate yet
+    const emp = await Employee.findById(employeeId).select("fullName email").lean();
+    responseBase.employeeName  = emp?.fullName ?? "";
+    responseBase.employeeEmail = emp?.email ?? "";
+  } else {
+    // Final attempt but failed — no certificate
+    const emp = await Employee.findById(employeeId).select("fullName email").lean();
+    responseBase.employeeName  = emp?.fullName ?? "";
+    responseBase.employeeEmail = emp?.email ?? "";
   }
+
+  // Mark invitation as completed when assessment is finalized
+  if (isFinal) {
+    await Invitation.updateOne(
+      { employeeId, cycleId },
+      { $set: { status: "completed" } }
+    );
+  }
+
+  return NextResponse.json({ success: true, data: responseBase });
+}

@@ -1,11 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Enable React strict mode for safer development
   reactStrictMode: true,
+  experimental: {
+    instrumentationHook: true, // enables src/instrumentation.ts (stable in Next 15)
+  },
 
   // Image domains if needed later
   images: {
     remotePatterns: [],
+    unoptimized: true,
   },
 
   // Environment variable exposure to the client

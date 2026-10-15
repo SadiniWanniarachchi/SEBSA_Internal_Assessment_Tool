@@ -3,12 +3,16 @@ import type { JwtPayload, UserRole } from "@/types";
 
 // Pure Web Crypto / Edge Runtime compatible JWT helpers
 
+let _cachedSecret: Uint8Array | undefined;
+
 function getJwtSecret(): Uint8Array {
+  if (_cachedSecret) return _cachedSecret;
   const secret = process.env.JWT_SECRET;
   if (!secret || secret.length < 32) {
     throw new Error("JWT_SECRET must be set and at least 32 characters long.");
   }
-  return new TextEncoder().encode(secret);
+  _cachedSecret = new TextEncoder().encode(secret);
+  return _cachedSecret;
 }
 
 /**

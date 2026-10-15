@@ -3,38 +3,56 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Avatar from "@mui/material/Avatar";
+import CircularProgress from "@mui/material/CircularProgress";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
+import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
-import SecurityOutlinedIcon from "@mui/icons-material/SecurityOutlined";
+import MenuIcon from "@mui/icons-material/Menu";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import LogoutIcon from "@mui/icons-material/Logout";
 
-const P = "#6343D8";
-const PD = "#5332C7";
+const P  = "#3E0B78";
+const PD = "#2E0858";
 
 export interface NavbarProps {
   userName?: string;
   userEmail?: string;
+  homeUrl?: string;
+  onMenuToggle?: () => void;
+  showLogo?: boolean;
+  showLogout?: boolean;
+  height?: { xs: number; sm: number };
 }
 
-export function Navbar({ userName, userEmail }: NavbarProps) {
+export function Navbar({
+  userName,
+  userEmail,
+  homeUrl = "/dashboard",
+  onMenuToggle,
+  showLogo = true,
+  showLogout = true,
+  height = { xs: 60, sm: 68 },
+}: NavbarProps) {
   const router = useRouter();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const initials = userName
     ? userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
     : "SW";
 
   const handleLogout = async () => {
+    if (loggingOut) return;
     setMenuAnchor(null);
+    setLoggingOut(true);
     await fetch("/api/auth", { method: "DELETE" });
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (
@@ -43,73 +61,48 @@ export function Navbar({ userName, userEmail }: NavbarProps) {
       sx={{
         width: "100%",
         bgcolor: "#FFFFFF",
-        borderBottom: `1px solid ${alpha(P, 0.08)}`,
+        borderBottom: `1px solid ${alpha(P, 0.1)}`,
         position: "sticky",
         top: 0,
-        zIndex: 100,
+        zIndex: 1200,
       }}
     >
       <Box
         sx={{
-          maxWidth: 1280,
-          mx: "auto",
           px: { xs: 2, sm: 3, md: 4 },
-          height: { xs: 60, sm: 68 },
+          height,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 1,
         }}
       >
-        {/* Brand */}
-        <Box
-          sx={{ display: "flex", alignItems: "center", gap: { xs: 1.25, sm: 1.5 }, cursor: "pointer" }}
-          onClick={() => router.push("/dashboard")}
-        >
-          <Box
-            sx={{
-              width: { xs: 34, sm: 38 },
-              height: { xs: 34, sm: 38 },
-              borderRadius: "10px",
-              background: `linear-gradient(135deg, ${P}, ${PD})`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: `0 4px 12px ${alpha(P, 0.32)}`,
-              flexShrink: 0,
-            }}
-          >
-            <SecurityOutlinedIcon sx={{ color: "white", fontSize: { xs: 18, sm: 20 } }} />
-          </Box>
-          <Box>
-            <Typography
-              sx={{
-                fontWeight: 800,
-                fontSize: { xs: "1rem", sm: "1.1rem" },
-                letterSpacing: "-0.4px",
-                lineHeight: 1.1,
-                background: `linear-gradient(120deg, ${P} 0%, #3C2FCF 55%, ${PD} 100%)`,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
+        {/* Left: optional hamburger (admin mobile) + logo */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {onMenuToggle && (
+            <IconButton
+              onClick={onMenuToggle}
+              sx={{ display: { md: "none" }, color: P, mr: 0.5 }}
+              aria-label="open navigation"
             >
-              SEBSA
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: { xs: "0.58rem", sm: "0.62rem" },
-                color: "text.secondary",
-                fontWeight: 500,
-                lineHeight: 1.1,
-                letterSpacing: "0.01em",
-              }}
+              <MenuIcon />
+            </IconButton>
+          )}
+          {showLogo && (
+            <Box
+              sx={{ display: "flex", alignItems: "center", cursor: "pointer", flexShrink: 0 }}
+              onClick={() => router.push(homeUrl)}
             >
-              Internal Assessment Portal
-            </Typography>
-          </Box>
+              <img
+                src="/sebsa-logo.png"
+                alt="SEBSA"
+                style={{ height: 48, width: "auto", display: "block", objectFit: "contain" }}
+              />
+            </Box>
+          )}
         </Box>
 
-        {/* User button */}
+        {/* Right: user button */}
         <Button
           onClick={(e) => setMenuAnchor(e.currentTarget)}
           endIcon={
@@ -172,14 +165,21 @@ export function Navbar({ userName, userEmail }: NavbarProps) {
               {userEmail}
             </Typography>
           </MenuItem>
-          <Divider sx={{ my: 0.5 }} />
-          <MenuItem
-            onClick={handleLogout}
-            sx={{ color: "error.main", gap: 1.25, py: 1, fontSize: "0.85rem", fontWeight: 600 }}
-          >
-            <LogoutIcon sx={{ fontSize: 17 }} />
-            Log out
-          </MenuItem>
+          {showLogout && (
+            <>
+              <Divider sx={{ my: 0.5 }} />
+              <MenuItem
+                onClick={handleLogout}
+                disabled={loggingOut}
+                sx={{ color: "error.main", gap: 1.25, py: 1, fontSize: "0.85rem", fontWeight: 600 }}
+              >
+                {loggingOut
+                  ? <CircularProgress size={17} color="error" />
+                  : <LogoutIcon sx={{ fontSize: 17 }} />}
+                {loggingOut ? "Logging out…" : "Log out"}
+              </MenuItem>
+            </>
+          )}
         </Menu>
       </Box>
     </Box>

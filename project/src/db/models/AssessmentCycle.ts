@@ -7,22 +7,28 @@ import mongoose, { Schema, Document, Model, Types } from "mongoose";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface IAssessmentCycle extends Document {
-  label:    string;           // e.g. "2026 H2"
-  status:   "active" | "closed";
-  openedAt: Date;
-  openedBy: Types.ObjectId;   // ref → AdminUser
-  closedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  label:         string;           // e.g. "2026 H2"
+  passingScore:  number;           // minimum score out of 10 required to pass
+  status:        "active" | "closed" | "deactivated";
+  openedAt:      Date;
+  openedBy:      Types.ObjectId;   // ref → AdminUser
+  closedAt:      Date | null;
+  deactivatedAt: Date | null;
+  deactivatedBy: Types.ObjectId | null;  // ref → AdminUser
+  createdAt:     Date;
+  updatedAt:     Date;
 }
 
 const AssessmentCycleSchema = new Schema<IAssessmentCycle>(
   {
-    label:    { type: String, required: true, trim: true },
-    status:   { type: String, enum: ["active", "closed"], default: "active" },
-    openedAt: { type: Date, default: () => new Date() },
-    openedBy: { type: Schema.Types.ObjectId, ref: "AdminUser", required: true },
-    closedAt: { type: Date, default: null },
+    label:         { type: String, required: true, trim: true },
+    passingScore:  { type: Number, required: true, min: 0, max: 10, default: 8 },
+    status:        { type: String, enum: ["active", "closed", "deactivated"], default: "active" },
+    openedAt:      { type: Date, default: () => new Date() },
+    openedBy:      { type: Schema.Types.ObjectId, ref: "AdminUser", required: true },
+    closedAt:      { type: Date, default: null },
+    deactivatedAt: { type: Date, default: null },
+    deactivatedBy: { type: Schema.Types.ObjectId, ref: "AdminUser", default: null },
   },
   {
     timestamps: true,

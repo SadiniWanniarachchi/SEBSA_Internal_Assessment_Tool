@@ -2,7 +2,8 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import type { JwtPayload, UserRole } from "@/types";
 
-const SALT_ROUNDS = 12;
+// 10 rounds in dev (~100 ms), 12 in production (~400 ms) — bcrypt cost scales exponentially
+const SALT_ROUNDS = process.env.NODE_ENV === "production" ? 12 : 10;
 
 // ─── Password hashing ─────────────────────────────────────────────────────────
 
@@ -20,3 +21,18 @@ export async function verifyPassword(
 }
 
 export { signToken, verifyToken } from "./jwt";
+
+/**
+ * Read the authenticated user identity from headers forwarded by middleware.
+ * Returns the userId string when the role matches, or null when unauthorised.
+ * Trusts the middleware JWT check — do not call from routes in PUBLIC_PATHS.
+ */
+export function requireRole(
+  req: { headers: { get(name: string): string | null } },
+  role: "admin" | "employee",
+): string | null {
+  const userId   = req.headers.get("x-user-id");
+  const userRole = req.headers.get("x-user-role");
+  if (!userId || userRole !== role) return null;
+  return userId;
+}
