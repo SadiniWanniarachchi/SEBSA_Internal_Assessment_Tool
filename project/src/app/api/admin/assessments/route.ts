@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import connectDB from "@/db";
 import { AssessmentCycle, Invitation, Attempt } from "@/db/models";
 
@@ -16,11 +16,7 @@ import { AssessmentCycle, Invitation, Attempt } from "@/db/models";
 //   sortBy      – "openedAt" | "label" | "passRate" | "recipients" (default "openedAt")
 //   sortOrder   – "asc" | "desc" (default "desc")
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
+  if (!requireRole(req, "admin")) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 

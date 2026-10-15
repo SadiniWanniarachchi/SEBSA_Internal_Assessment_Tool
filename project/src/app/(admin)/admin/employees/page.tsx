@@ -36,8 +36,10 @@ import {
   DeleteOutlined,
   PersonOutlined,
   SearchOutlined,
+  UploadFileOutlined,
 } from "@mui/icons-material";
 import { sebsaColors } from "@/lib/theme";
+import { BulkImportDialog } from "@/components/BulkImportDialog";
 
 const colors = sebsaColors;
 const P = colors.primary;
@@ -60,8 +62,9 @@ export default function AdminEmployeesPage() {
   const [saving, setSaving]             = useState(false);
   const [formError, setFormError]       = useState("");
   const [pageMessage, setPageMessage]   = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
-  const [deleting, setDeleting]         = useState(false);
+  const [deleteTarget, setDeleteTarget]   = useState<Employee | null>(null);
+  const [deleting, setDeleting]           = useState(false);
+  const [importOpen, setImportOpen]       = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -161,14 +164,24 @@ export default function AdminEmployeesPage() {
             {employees.length} total · {activeCount} active
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddOutlined />}
-          onClick={() => { setDialogOpen(true); setForm(emptyForm); setFormError(""); }}
-          sx={{ px: 2.5, alignSelf: { xs: "stretch", sm: "auto" } }}
-        >
-          Add Employee
-        </Button>
+        <Stack direction="row" spacing={1.5} sx={{ alignSelf: { xs: "stretch", sm: "auto" } }}>
+          <Button
+            variant="outlined"
+            startIcon={<UploadFileOutlined />}
+            onClick={() => setImportOpen(true)}
+            sx={{ px: 2, flexShrink: 0 }}
+          >
+            Import
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddOutlined />}
+            onClick={() => { setDialogOpen(true); setForm(emptyForm); setFormError(""); }}
+            sx={{ px: 2.5 }}
+          >
+            Add Employee
+          </Button>
+        </Stack>
       </Stack>
 
       {pageMessage && (
@@ -320,6 +333,16 @@ export default function AdminEmployeesPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Bulk Import Dialog */}
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => {
+          fetchEmployees();
+          setPageMessage("Bulk import completed. Employee list updated.");
+        }}
+      />
     </Container>
   );
 }

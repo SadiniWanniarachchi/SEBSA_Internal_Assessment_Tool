@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import connectDB from "@/db";
 import { AssessmentCycle, AdminAuditLog } from "@/db/models";
 
@@ -9,13 +9,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-  }
+  const adminId = requireRole(req, "admin");
+  if (!adminId) return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
 
   const { id } = params;
   const body = await req.json().catch(() => ({}));
@@ -44,12 +39,12 @@ export async function PATCH(
     }
     cycle.status       = "deactivated";
     cycle.deactivatedAt = new Date();
-    cycle.deactivatedBy = payload.sub as any;
+    cycle.deactivatedBy = adminId as any;
 
     await cycle.save();
 
     await AdminAuditLog.create({
-      adminId:    payload.sub,
+      adminId,
       action:     "cycle_deactivated",
       targetId:   cycle._id,
       targetType: "cycle",
@@ -97,7 +92,7 @@ export async function PATCH(
   await cycle.save();
 
   await AdminAuditLog.create({
-    adminId:    payload.sub,
+    adminId,
     action:     "cycle_reactivated",
     targetId:   cycle._id,
     targetType: "cycle",

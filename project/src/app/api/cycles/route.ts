@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { createCycleSchema } from "@/schemas";
 import { sendAssessmentInvitation } from "@/lib/email";
 import connectDB from "@/db";
@@ -10,15 +10,8 @@ const INVITATION_TTL_DAYS = 7;
 // ─── POST /api/cycles ──────────────────────────────────────────────────────────
 // Admin: Open a new assessment cycle and send emails to all active employees.
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-  }
-
-  const adminId = payload.sub;
+  const adminId = requireRole(req, "admin");
+  if (!adminId) return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
   const parsed = createCycleSchema.safeParse(body);
@@ -108,11 +101,7 @@ export async function POST(req: NextRequest) {
 
 // ─── GET /api/cycles ───────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
+  if (!requireRole(req, "admin")) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 

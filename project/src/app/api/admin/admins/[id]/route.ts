@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import connectDB from "@/db";
 import { AdminUser } from "@/db/models";
 
@@ -9,15 +9,10 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const adminId = requireRole(req, "admin");
+  if (!adminId) return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
 
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-  }
-
-  if (payload.sub === params.id) {
+  if (adminId === params.id) {
     return NextResponse.json(
       { success: false, error: "You cannot remove your own admin account." },
       { status: 400 }

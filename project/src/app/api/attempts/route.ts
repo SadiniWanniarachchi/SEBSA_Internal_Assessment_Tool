@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { submitAssessmentSchema } from "@/schemas";
 import { scoreAttempt } from "@/lib/utils";
 import { generateCertificate } from "@/lib/pdf";
@@ -21,15 +21,8 @@ const RETRY_THRESHOLD = 6;
 // ─── POST /api/attempts ───────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "employee") {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-  }
-
-  const employeeId = payload.sub;
+  const employeeId = requireRole(req, "employee");
+  if (!employeeId) return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
 
   // ── Validate body ─────────────────────────────────────────────────────────
   const body = await req.json();

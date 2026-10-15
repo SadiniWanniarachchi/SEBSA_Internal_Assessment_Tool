@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken, hashPassword } from "@/lib/auth";
+import { requireRole, hashPassword } from "@/lib/auth";
 import { updateEmployeeSchema } from "@/schemas";
 import connectDB from "@/db";
 import { Employee, Invitation } from "@/db/models";
@@ -9,11 +9,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
+  if (!requireRole(req, "admin")) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
@@ -54,11 +50,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
+  if (!requireRole(req, "admin")) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
@@ -89,11 +81,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
+  if (!requireRole(req, "admin")) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 

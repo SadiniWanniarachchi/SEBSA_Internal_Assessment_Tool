@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import connectDB from "@/db";
 import { Certificate, Attempt, Employee, AssessmentCycle } from "@/db/models";
 import { generateCertificate } from "@/lib/pdf";
@@ -10,13 +9,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   // ── Auth: verify the requester is a logged-in employee ────────────────────
-  const cookieStore = await cookies();
-  const token = cookieStore.get("token")?.value;
-  if (!token) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "employee") {
+  const employeeId = requireRole(req, "employee");
+  if (!employeeId) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
@@ -40,7 +34,7 @@ export async function GET(
   }
 
   // Prevent employees from accessing certificates belonging to other employees
-  if (attempt.employeeId.toString() !== payload.sub) {
+  if (attempt.employeeId.toString() !== employeeId) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 

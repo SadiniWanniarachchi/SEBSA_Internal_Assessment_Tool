@@ -135,19 +135,19 @@ export async function GET(req: NextRequest) {
   }
 
   if (payload.role === "employee") {
-    const employee = await Employee.findById(payload.sub).select("-passwordHash").lean();
-    if (!employee) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
-    }
-
-    // Run independent queries in parallel to cut round-trip latency
-    const [activeCycle, allAttempts] = await Promise.all([
+    // Run all three independent queries in one parallel batch to cut serial round-trips
+    const [employee, activeCycle, allAttempts] = await Promise.all([
+      Employee.findById(payload.sub).select("-passwordHash").lean(),
       AssessmentCycle.findOne({ status: "active" }).lean(),
-      Attempt.find({ employeeId: employee._id })
+      Attempt.find({ employeeId: payload.sub })
         .select("_id cycleId score submittedAt")
         .populate({ path: "cycleId", select: "label" })
         .lean(),
     ]);
+
+    if (!employee) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+    }
 
     // currentAttempt and certificates depend on the results above — run them in parallel too
     const attemptIds = allAttempts.map(a => a._id);

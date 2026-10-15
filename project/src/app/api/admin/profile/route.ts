@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken, verifyPassword, hashPassword } from "@/lib/auth";
+import { requireRole, verifyPassword, hashPassword } from "@/lib/auth";
 import connectDB from "@/db";
 import { AdminUser } from "@/db/models";
 
 // PATCH /api/admin/profile
 // Allows the authenticated admin to update their display name or change their password.
 export async function PATCH(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-  }
+  const adminId = requireRole(req, "admin");
+  if (!adminId) return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
   const { fullName, currentPassword, newPassword } = body as {
@@ -22,7 +17,7 @@ export async function PATCH(req: NextRequest) {
   };
 
   await connectDB();
-  const admin = await AdminUser.findById(payload.sub);
+  const admin = await AdminUser.findById(adminId);
   if (!admin) {
     return NextResponse.json({ success: false, error: "Admin not found." }, { status: 404 });
   }

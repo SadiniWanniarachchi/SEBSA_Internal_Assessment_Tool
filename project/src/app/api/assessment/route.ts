@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import connectDB from "@/db";
 import { AssessmentCycle, Attempt, Question, Invitation } from "@/db/models";
 import { shuffle } from "@/lib/utils";
@@ -9,13 +9,8 @@ const RETRY_THRESHOLD = 6;
 
 // ── GET /api/assessment ──────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "employee") {
+  const employeeId = requireRole(req, "employee");
+  if (!employeeId) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
@@ -32,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   // ── Invitation check (server-side expiry enforcement) ────────────────────
   const invitation = await Invitation.findOne({
-    employeeId: payload.sub,
+    employeeId,
     cycleId:    activeCycle._id,
   }).lean();
 
@@ -76,7 +71,7 @@ export async function GET(req: NextRequest) {
 
   // ── Existing attempts ────────────────────────────────────────────────────
   const existingAttempts = await Attempt.find({
-    employeeId: payload.sub,
+    employeeId,
     cycleId:    activeCycle._id,
   })
     .sort({ attemptNumber: 1 })

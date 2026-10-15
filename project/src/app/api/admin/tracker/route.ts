@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import connectDB from "@/db";
 import { AssessmentCycle, Employee, Attempt, Invitation } from "@/db/models";
 
 // GET /api/admin/tracker
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const payload = await verifyToken(token).catch(() => null);
-  if (!payload || payload.role !== "admin") {
+  if (!requireRole(req, "admin")) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
