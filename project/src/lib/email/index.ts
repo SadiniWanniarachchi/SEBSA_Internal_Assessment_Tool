@@ -35,7 +35,7 @@ function getConfig(): EmailConfig {
     fromEmail: process.env.EMAIL_FROM        ?? "no-reply@sebsaworld.com",
     fromName:  process.env.BREVO_SENDER_NAME ?? "SEBSA Internal Assessment",
     hrCc:      process.env.HR_EMAIL_CC       ?? "",
-    baseUrl:   process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000",
+    baseUrl:   process.env.APP_URL ?? "http://localhost:3000",
   };
 }
 
@@ -103,6 +103,16 @@ async function sendBrevoEmail(payload: BrevoPayload, apiKey: string): Promise<vo
     console.error(`[Email] Brevo API returned ${res.status}. Response: ${text}`);
     const snippet = text.slice(0, 200).replace(/[\r\n]+/g, " ").trim();
     throw new Error(`[Email] Brevo API error: HTTP ${res.status}. ${snippet}`);
+  }
+
+  // Log the Brevo message ID so delivery can be traced in Brevo's activity log.
+  try {
+    const body = await res.json() as { messageId?: string };
+    if (body.messageId) {
+      console.log(`[Email] Brevo accepted message. ID: ${body.messageId} → to: ${payload.to.map((r) => r.email).join(", ")}`);
+    }
+  } catch {
+    // Response body unreadable — not a failure, Brevo already returned 2xx.
   }
 }
 

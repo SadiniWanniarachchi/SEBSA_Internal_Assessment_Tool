@@ -106,10 +106,10 @@ describe("sendAssessmentInvitation", () => {
     restore();
   });
 
-  it("uses the configured NEXT_PUBLIC_BASE_URL for the login link (not localhost)", async () => {
+  it("uses the configured APP_URL for the login link (not localhost)", async () => {
     const restore = setEnv({
-      BREVO_API_KEY:        FAKE_API_KEY,
-      NEXT_PUBLIC_BASE_URL: "https://sebsa.vercel.app",
+      BREVO_API_KEY: FAKE_API_KEY,
+      APP_URL:       "https://sebsa.vercel.app",
     });
     const spy = mockFetchOk();
 
