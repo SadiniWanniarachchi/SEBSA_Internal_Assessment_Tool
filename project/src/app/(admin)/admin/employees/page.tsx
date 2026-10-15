@@ -65,6 +65,11 @@ export default function AdminEmployeesPage() {
   const [deleteTarget, setDeleteTarget]   = useState<Employee | null>(null);
   const [deleting, setDeleting]           = useState(false);
   const [importOpen, setImportOpen]       = useState(false);
+  const [statusFilter,   setStatusFilter]   = useState<"all" | "active" | "inactive">("all");
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkAction,     setBulkAction]     = useState<"activate" | "deactivate">("deactivate");
+  const [bulkBusy,       setBulkBusy]       = useState(false);
+  const [bulkError,      setBulkError]      = useState("");
 
   useEffect(() => {
     async function load() {
@@ -136,13 +141,40 @@ export default function AdminEmployeesPage() {
     }
   }
 
-  const filtered = employees.filter(
-    (e) =>
-      e.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      e.email.toLowerCase().includes(search.toLowerCase())
-  );
+  async function handleBulkAction() {
+    setBulkBusy(true);
+    setBulkError("");
+    try {
+      const res  = await fetch("/api/employees/bulk-status", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ action: bulkAction }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setBulkError(json.error ?? "Bulk action failed.");
+        return;
+      }
+      setPageMessage(json.message ?? "Bulk action completed.");
+      setBulkDialogOpen(false);
+      await fetchEmployees();
+    } catch {
+      setBulkError("Network error.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
-  const activeCount = employees.filter((e) => e.status === "active").length;
+  const activeCount   = employees.filter((e) => e.status === "active").length;
+  const inactiveCount = employees.length - activeCount;
+
+  const filtered = employees.filter((e) => {
+    const matchesStatus = statusFilter === "all" || e.status === statusFilter;
+    const matchesSearch =
+      e.fullName.toLowerCase().includes(search.toLowerCase()) ||
+      e.email.toLowerCase().includes(search.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
 
   if (loading) {
     return (
@@ -191,10 +223,26 @@ export default function AdminEmployeesPage() {
       )}
 
       <Card sx={{ borderRadius: 2 }}>
-        <Box sx={{ px: { xs: 2, sm: 2.5 }, py: 2, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-          <Stack direction="row" spacing={1}>
-            <Chip icon={<PersonOutlined />} label={`${activeCount} Active`} color="success" size="small" />
-            <Chip label={`${employees.length - activeCount} Inactive`} size="small" />
+        <Box sx={{ px: { xs: 2, sm: 2.5 }, pt: 2, pb: 1.5, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+          {/* Status filter chips — also serve as quick counts */}
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+            {(["all", "active", "inactive"] as const).map((f) => {
+              const count = f === "all" ? employees.length : employees.filter((e) => e.status === f).length;
+              const selected = statusFilter === f;
+              return (
+                <Chip
+                  key={f}
+                  label={`${f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)} (${count})`}
+                  icon={f === "active" ? <PersonOutlined /> : undefined}
+                  onClick={() => setStatusFilter(f)}
+                  color={selected && f === "active" ? "success" : selected ? "primary" : "default"}
+                  variant={selected ? "filled" : "outlined"}
+                  size="small"
+                  clickable
+                  sx={{ fontWeight: selected ? 700 : 400 }}
+                />
+              );
+            })}
           </Stack>
           <TextField
             size="small"
@@ -202,9 +250,38 @@ export default function AdminEmployeesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchOutlined sx={{ fontSize: 18, color: colors.muted }} /></InputAdornment> } }}
-            sx={{ width: { xs: "100%", sm: 280 } }}
+            sx={{ width: { xs: "100%", sm: 260 } }}
           />
         </Box>
+        {/* Bulk action buttons — shown only when there are employees to act on */}
+        {(activeCount > 0 || inactiveCount > 0) && (
+          <Box sx={{ px: { xs: 2, sm: 2.5 }, pb: 1.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
+            {activeCount > 0 && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                startIcon={<BlockOutlined />}
+                onClick={() => { setBulkAction("deactivate"); setBulkError(""); setBulkDialogOpen(true); }}
+                sx={{ fontSize: 12 }}
+              >
+                Deactivate All ({activeCount})
+              </Button>
+            )}
+            {inactiveCount > 0 && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="success"
+                startIcon={<CheckCircleOutlineOutlined />}
+                onClick={() => { setBulkAction("activate"); setBulkError(""); setBulkDialogOpen(true); }}
+                sx={{ fontSize: 12 }}
+              >
+                Activate All ({inactiveCount})
+              </Button>
+            )}
+          </Box>
+        )}
         <Divider />
         <TableContainer>
           <Table size="small">
@@ -330,6 +407,51 @@ export default function AdminEmployeesPage() {
             disabled={deleting}
           >
             {deleting ? "Deleting…" : "Permanently Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Status Confirmation Dialog */}
+      <Dialog open={bulkDialogOpen} onClose={() => !bulkBusy && setBulkDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ color: bulkAction === "deactivate" ? colors.error : "success.main" }}>
+          {bulkAction === "deactivate"
+            ? "Deactivate All Active Employees?"
+            : "Activate All Inactive Employees?"}
+        </DialogTitle>
+        <DialogContent>
+          {bulkError && <Alert severity="error" sx={{ mb: 2 }}>{bulkError}</Alert>}
+          <DialogContentText>
+            {bulkAction === "deactivate" ? (
+              <>
+                This will <strong>deactivate all {activeCount} active employee{activeCount !== 1 ? "s" : ""}</strong>.
+                Deactivated employees will be blocked from logging in immediately.
+                <br /><br />
+                Assessment history, scores, and certificates are <strong>not affected</strong>.
+                You can re-activate employees individually at any time.
+              </>
+            ) : (
+              <>
+                This will <strong>activate all {inactiveCount} inactive employee{inactiveCount !== 1 ? "s" : ""}</strong>,
+                restoring their ability to log in.
+                <br /><br />
+                Existing assessment records are <strong>not affected</strong>.
+              </>
+            )}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDialogOpen(false)} color="inherit" disabled={bulkBusy}>Cancel</Button>
+          <Button
+            onClick={handleBulkAction}
+            variant="contained"
+            color={bulkAction === "deactivate" ? "error" : "success"}
+            disabled={bulkBusy}
+          >
+            {bulkBusy
+              ? `${bulkAction === "deactivate" ? "Deactivating" : "Activating"}…`
+              : bulkAction === "deactivate"
+              ? `Deactivate All (${activeCount})`
+              : `Activate All (${inactiveCount})`}
           </Button>
         </DialogActions>
       </Dialog>
