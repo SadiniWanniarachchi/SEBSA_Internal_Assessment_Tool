@@ -93,10 +93,13 @@ async function sendBrevoEmail(payload: BrevoPayload, apiKey: string): Promise<vo
   clearTimeout(timer);
 
   if (!res.ok) {
-    // Log status without echoing the API key or request body
     const text = await res.text().catch(() => "(unreadable response)");
     console.error(`[Email] Brevo API returned ${res.status}. Response: ${text}`);
-    throw new Error(`[Email] Brevo API error: HTTP ${res.status}.`);
+    // Include a sanitized snippet so the emailError stored in the Invitation
+    // document contains actionable diagnostic information (e.g. "Unauthorized",
+    // "sender not verified"). Cap at 200 chars to avoid storing HTML error pages.
+    const snippet = text.slice(0, 200).replace(/[\r\n]+/g, " ").trim();
+    throw new Error(`[Email] Brevo API error: HTTP ${res.status}. ${snippet}`);
   }
 }
 

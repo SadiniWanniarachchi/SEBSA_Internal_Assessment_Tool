@@ -62,6 +62,7 @@ export async function GET(
       employeeEmail: emp?.email ?? "",
       invitationStatus: invStatus,
       emailStatus:   inv.emailStatus,
+      emailError:    inv.emailStatus === "failed" ? (inv.emailError ?? null) : null,
       sentAt:        inv.sentAt,
       expiresAt:     inv.expiresAt,
       resentAt:      inv.resentAt ?? null,

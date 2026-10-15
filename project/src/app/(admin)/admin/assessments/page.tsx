@@ -101,6 +101,7 @@ interface RecipientRow {
   employeeEmail:    string;
   invitationStatus: string;
   emailStatus:      string;
+  emailError:       string | null;
   sentAt:           string;
   expiresAt:        string;
   resentAt:         string | null;
@@ -571,7 +572,12 @@ export default function AdminAssessmentsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSendOpen(false)} color="inherit" disabled={sendBusy}>Cancel</Button>
-          <Button onClick={handleSend} variant="contained" disabled={sendBusy} startIcon={<SendOutlined />}>
+          <Button
+            onClick={handleSend}
+            variant="contained"
+            disabled={sendBusy}
+            startIcon={sendBusy ? <CircularProgress size={16} color="inherit" /> : <SendOutlined />}
+          >
             {sendBusy ? "Sending…" : "Send Assessment"}
           </Button>
         </DialogActions>
@@ -771,7 +777,7 @@ function CycleCard({
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <InvStatusChip status={row.invitationStatus} emailStatus={row.emailStatus} />
+                        <InvStatusChip status={row.invitationStatus} emailStatus={row.emailStatus} emailError={row.emailError} />
                       </TableCell>
                       <TableCell>
                         <Typography sx={{ fontSize: 12 }}>
@@ -806,7 +812,7 @@ function CycleCard({
   );
 }
 
-function InvStatusChip({ status, emailStatus }: { status: string; emailStatus: string }) {
+function InvStatusChip({ status, emailStatus, emailError }: { status: string; emailStatus: string; emailError?: string | null }) {
   const map: Record<string, { label: string; color: "default" | "success" | "error" | "warning" | "info" }> = {
     pending:   { label: "Pending",   color: "default" },
     opened:    { label: "Opened",    color: "info" },
@@ -819,7 +825,9 @@ function InvStatusChip({ status, emailStatus }: { status: string; emailStatus: s
     <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
       <Chip label={s.label} color={s.color} size="small" sx={{ fontSize: "0.65rem", fontWeight: 700 }} />
       {emailStatus === "failed" && (
-        <Chip label="Email failed" color="error" variant="outlined" size="small" sx={{ fontSize: "0.6rem" }} />
+        <Tooltip title={emailError ?? "Email delivery failed"} placement="top" arrow>
+          <Chip label="Email failed" color="error" variant="outlined" size="small" sx={{ fontSize: "0.6rem", cursor: "help" }} />
+        </Tooltip>
       )}
     </Stack>
   );

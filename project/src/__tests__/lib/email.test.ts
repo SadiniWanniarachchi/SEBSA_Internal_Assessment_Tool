@@ -281,6 +281,87 @@ describe("sendCertificateEmail", () => {
   });
 });
 
+// ── Error body propagation ────────────────────────────────────────────────────
+
+describe("error body propagation", () => {
+  const inviteParams = {
+    toEmail:      "err@sebsaworld.com",
+    employeeName: "Err User",
+    cycleLabel:   "2026 H2",
+    expiresAt:    new Date("2026-12-31T23:59:59Z"),
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it("includes a sanitized Brevo response snippet in the thrown error", async () => {
+    const restore = setEnv({ BREVO_API_KEY: FAKE_API_KEY });
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response('{"message":"Invalid sender — not verified","code":"unauthorized"}', { status: 401 }),
+    );
+
+    try {
+      await sendAssessmentInvitation(inviteParams);
+      fail("Expected error was not thrown");
+    } catch (err) {
+      const msg = (err as Error).message;
+      expect(msg).toContain("401");
+      expect(msg).toContain("Invalid sender");
+    }
+    restore();
+  });
+
+  it("caps the error snippet at 200 characters when Brevo returns a long body", async () => {
+    const restore = setEnv({ BREVO_API_KEY: FAKE_API_KEY });
+    const longBody = "x".repeat(500);
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(longBody, { status: 400 }),
+    );
+
+    try {
+      await sendAssessmentInvitation(inviteParams);
+      fail("Expected error was not thrown");
+    } catch (err) {
+      const msg = (err as Error).message;
+      // The snippet is capped; full 500-char body should not appear.
+      expect(msg.length).toBeLessThan(400);
+    }
+    restore();
+  });
+
+  it("throws '[Email] Brevo API request timed out' when fetch is aborted", async () => {
+    const restore = setEnv({ BREVO_API_KEY: FAKE_API_KEY });
+    jest.spyOn(global, "fetch").mockRejectedValue(
+      Object.assign(new Error("The operation was aborted"), { name: "AbortError" }),
+    );
+
+    await expect(sendAssessmentInvitation(inviteParams)).rejects.toThrow(/timed out/i);
+    restore();
+  });
+
+  it("throws '[Email] Network error' when fetch rejects with a non-AbortError", async () => {
+    const restore = setEnv({ BREVO_API_KEY: FAKE_API_KEY });
+    jest.spyOn(global, "fetch").mockRejectedValue(new Error("ECONNREFUSED"));
+
+    await expect(sendAssessmentInvitation(inviteParams)).rejects.toThrow(/Network error/i);
+    restore();
+  });
+
+  it("does not expose the full API key in the error from a 401 response", async () => {
+    const restore = setEnv({ BREVO_API_KEY: FAKE_API_KEY });
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response('{"message":"Unauthorized"}', { status: 401 }),
+    );
+
+    try {
+      await sendAssessmentInvitation(inviteParams);
+      fail("Expected error was not thrown");
+    } catch (err) {
+      expect((err as Error).message).not.toContain(FAKE_API_KEY);
+    }
+    restore();
+  });
+});
+
 // ── Sender configuration ──────────────────────────────────────────────────────
 
 describe("sender configuration", () => {
