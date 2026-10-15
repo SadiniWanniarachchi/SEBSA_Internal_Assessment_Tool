@@ -161,11 +161,12 @@ describe("sendAssessmentInvitation", () => {
     restore();
   });
 
-  it("resolves without throwing on a successful 201 response", async () => {
+  it("resolves with a messageId object on a successful 201 response", async () => {
     const restore = setEnv({ BREVO_API_KEY: FAKE_API_KEY });
     mockFetchOk(201);
 
-    await expect(sendAssessmentInvitation(inviteParams)).resolves.toBeUndefined();
+    const result = await sendAssessmentInvitation(inviteParams);
+    expect(result).toHaveProperty("messageId");
     restore();
   });
 });

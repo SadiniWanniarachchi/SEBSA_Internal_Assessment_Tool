@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyPassword, signToken, verifyToken } from "@/lib/auth";
 import { loginSchema } from "@/schemas";
 import connectDB from "@/db";
-import { Employee, AdminUser, AssessmentCycle, Attempt, Certificate } from "@/db/models";
+import { Employee, AdminUser, AssessmentCycle, Attempt, Certificate, Invitation } from "@/db/models";
 
 // ── POST /api/auth (Login) ───────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -149,9 +149,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    // currentAttempt and certificates depend on the results above — run them in parallel too
+    // currentAttempt, certificates, and invitation depend on the results above — run them in parallel
     const attemptIds = allAttempts.map(a => a._id);
-    const [latestAttempt, certificates] = await Promise.all([
+    const [latestAttempt, certificates, invitation] = await Promise.all([
       activeCycle
         ? Attempt.findOne({ employeeId: employee._id, cycleId: activeCycle._id })
             .sort({ attemptNumber: -1 })
@@ -161,6 +161,11 @@ export async function GET(req: NextRequest) {
       Certificate.find({ attemptId: { $in: attemptIds } })
         .select("_id certificateNumber issuedAt attemptId")
         .lean(),
+      activeCycle
+        ? Invitation.findOne({ employeeId: employee._id, cycleId: activeCycle._id })
+            .select("expiresAt")
+            .lean()
+        : Promise.resolve(null),
     ]);
 
     // pendingAssessment: true when no attempt started yet
@@ -172,16 +177,18 @@ export async function GET(req: NextRequest) {
     // O(1) lookup instead of O(n²) nested scan
     const attemptById = new Map(allAttempts.map(a => [a._id.toString(), a]));
 
-    const certList = certificates.map(c => {
+    const certList = (certificates as any[]).map((c) => {
       const attempt = attemptById.get(c.attemptId.toString());
       return {
-        id: c._id.toString(),
+        id:                c._id.toString(),
         certificateNumber: c.certificateNumber,
-        issuedAt: c.issuedAt,
-        score: attempt?.score ?? null,
-        cycleLabel: (attempt?.cycleId as any)?.label ?? null,
+        issuedAt:          c.issuedAt,
+        score:             attempt?.score ?? null,
+        cycleLabel:        (attempt?.cycleId as any)?.label ?? null,
       };
-    }).sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
+    }).sort((a: { issuedAt: Date }, b: { issuedAt: Date }) =>
+      new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime()
+    );
 
     return NextResponse.json({
       success: true,
@@ -190,17 +197,16 @@ export async function GET(req: NextRequest) {
           id: employee._id.toString(),
           fullName: employee.fullName,
           email: employee.email,
-          department: employee.department || "Enterprise Consulting",
-          roleTitle: employee.roleTitle || "Senior ERP Consultant · Supply Chain Practice",
-          employeeIdCode: employee.employeeIdCode || "SBS-0482",
-          tierBadge: employee.tierBadge || "Tier-1 Certified",
-          joinedDate: employee.joinedDate || new Date("2021-03-15"),
           role: "employee",
         },
         activeCycle: activeCycle ? {
           id: activeCycle._id.toString(),
           label: activeCycle.label,
-          deadline: "November 30, 2026",
+          deadline: invitation?.expiresAt
+            ? new Date(invitation.expiresAt).toLocaleDateString("en-GB", {
+                day: "numeric", month: "long", year: "numeric",
+              })
+            : null,
         } : null,
         pendingAssessment,
         canRetry,

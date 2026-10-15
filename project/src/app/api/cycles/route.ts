@@ -52,18 +52,22 @@ export async function POST(req: NextRequest) {
 
   // Create one Invitation record per employee with email delivery status
   const invitationDocs = activeEmployees.map((emp, i) => {
-    const result  = emailResults[i];
-    const success = result.status === "fulfilled";
+    const result    = emailResults[i];
+    const success   = result.status === "fulfilled";
+    const messageId = success
+      ? (result as PromiseFulfilledResult<{ messageId: string | null }>).value.messageId
+      : null;
     return {
-      employeeId:  emp._id,
-      cycleId:     cycle._id,
-      sentAt:      now,
+      employeeId:      emp._id,
+      cycleId:         cycle._id,
+      sentAt:          now,
       expiresAt,
-      status:      "pending" as const,
-      emailStatus: success ? ("sent" as const) : ("failed" as const),
-      emailError:  !success
+      status:          "pending" as const,
+      emailStatus:     success ? ("sent" as const) : ("failed" as const),
+      emailError:      !success
         ? (result as PromiseRejectedResult).reason?.message ?? "Email send failed"
         : undefined,
+      brevoMessageId:  messageId ?? undefined,
     };
   });
 

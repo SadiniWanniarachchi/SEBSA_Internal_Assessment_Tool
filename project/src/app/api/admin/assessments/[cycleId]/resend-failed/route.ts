@@ -55,7 +55,7 @@ export async function POST(
         throw new Error(`Employee ${inv.employeeId} not found or inactive`);
       }
 
-      await sendAssessmentInvitation({
+      const { messageId } = await sendAssessmentInvitation({
         toEmail:      employee.email,
         employeeName: employee.fullName,
         cycleLabel:   cycle.label,
@@ -67,7 +67,9 @@ export async function POST(
       inv.resentAt    = now;
       inv.status      = "pending";
       inv.emailStatus = "sent";
-      inv.emailError  = undefined;
+      // Use .set() so Mongoose tracks the change and issues a $unset in MongoDB
+      inv.set("emailError", undefined);
+      if (messageId) inv.brevoMessageId = messageId;
       await inv.save();
     })
   );

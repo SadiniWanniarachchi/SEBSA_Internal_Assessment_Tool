@@ -104,6 +104,7 @@ interface RecipientRow {
   invitationStatus: string;
   emailStatus:      string;
   emailError:       string | null;
+  brevoMessageId:   string | null;
   sentAt:           string;
   expiresAt:        string;
   resentAt:         string | null;
@@ -188,8 +189,9 @@ export default function AdminAssessmentsPage() {
   const [deleteError,   setDeleteError]   = useState("");
 
   // ── Resend all failed ───────────────────────────────────────────────────────
-  const [resendAllBusy, setResendAllBusy] = useState<Record<string, boolean>>({});
-  const [operationMsg,  setOperationMsg]  = useState("");
+  const [resendAllBusy,     setResendAllBusy]     = useState<Record<string, boolean>>({});
+  const [operationMsg,      setOperationMsg]      = useState("");
+  const [operationSeverity, setOperationSeverity] = useState<"info" | "success" | "warning" | "error">("info");
 
   // ── Email delivery test ─────────────────────────────────────────────────────
   const [emailTestBusy,   setEmailTestBusy]   = useState(false);
@@ -297,19 +299,25 @@ export default function AdminAssessmentsPage() {
   async function handleResend(cycleId: string, employeeId: string) {
     setResendingFor((p) => ({ ...p, [employeeId]: true }));
     try {
-      await fetch(`/api/admin/assessments/${cycleId}/resend`, {
+      const resendRes  = await fetch(`/api/admin/assessments/${cycleId}/resend`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ employeeId }),
       });
-      // Refresh recipient list for this cycle
-      const res  = await fetch(`/api/admin/assessments/${cycleId}/recipients`);
-      const json = await res.json();
-      if (json.success) {
-        setRecipients((p) => ({ ...p, [cycleId]: json.data }));
+      const resendJson = await resendRes.json();
+      if (!resendJson.success) {
+        setOperationMsg(resendJson.message ?? "Resend failed — check the invitation row for details.");
+        setOperationSeverity("error");
+      }
+      // Refresh recipient list regardless so the row reflects the new emailStatus
+      const recipRes  = await fetch(`/api/admin/assessments/${cycleId}/recipients`);
+      const recipJson = await recipRes.json();
+      if (recipJson.success) {
+        setRecipients((p) => ({ ...p, [cycleId]: recipJson.data }));
       }
     } catch {
-      // Network error — leave state as-is; user can retry
+      setOperationMsg("Network error during resend. Please try again.");
+      setOperationSeverity("error");
     } finally {
       setResendingFor((p) => ({ ...p, [employeeId]: false }));
     }
@@ -344,11 +352,15 @@ export default function AdminAssessmentsPage() {
     try {
       const res  = await fetch(`/api/admin/assessments/${cycleId}/resend-failed`, { method: "POST" });
       const json = await res.json();
-      if (json.message) setOperationMsg(json.message);
+      if (json.message) {
+        setOperationMsg(json.message);
+        setOperationSeverity(json.success ? "success" : "warning");
+      }
       setRecipients((p) => { const n = { ...p }; delete n[cycleId]; return n; });
       await fetchRecords();
     } catch {
       setOperationMsg("Network error during bulk resend.");
+      setOperationSeverity("error");
     } finally {
       setResendAllBusy((p) => ({ ...p, [cycleId]: false }));
     }
@@ -464,7 +476,7 @@ export default function AdminAssessmentsPage() {
         <Alert severity="success" onClose={() => setSendSuccess("")} sx={{ mb: 2 }}>{sendSuccess}</Alert>
       )}
       {operationMsg && (
-        <Alert severity="info" onClose={() => setOperationMsg("")} sx={{ mb: 2 }}>{operationMsg}</Alert>
+        <Alert severity={operationSeverity} onClose={() => setOperationMsg("")} sx={{ mb: 2 }}>{operationMsg}</Alert>
       )}
       {emailTestResult && (
         <Alert severity={emailTestResult.ok ? "success" : "error"} onClose={() => setEmailTestResult(null)} sx={{ mb: 2 }}>
@@ -964,7 +976,7 @@ function CycleCard({
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <InvStatusChip status={row.invitationStatus} emailStatus={row.emailStatus} emailError={row.emailError} />
+                        <InvStatusChip status={row.invitationStatus} emailStatus={row.emailStatus} emailError={row.emailError} brevoMessageId={row.brevoMessageId} />
                         {row.emailStatus === "failed" && (
                           <Button
                             size="small"
@@ -1014,7 +1026,12 @@ function CycleCard({
   );
 }
 
-function InvStatusChip({ status, emailStatus, emailError }: { status: string; emailStatus: string; emailError?: string | null }) {
+function InvStatusChip({ status, emailStatus, emailError, brevoMessageId }: {
+  status: string;
+  emailStatus: string;
+  emailError?: string | null;
+  brevoMessageId?: string | null;
+}) {
   const map: Record<string, { label: string; color: "default" | "success" | "error" | "warning" | "info" }> = {
     pending:   { label: "Pending",   color: "default" },
     opened:    { label: "Opened",    color: "info" },
@@ -1023,9 +1040,18 @@ function InvStatusChip({ status, emailStatus, emailError }: { status: string; em
     expired:   { label: "Expired",   color: "error" },
   };
   const s = map[status] ?? { label: status, color: "default" as const };
+  const msgIdTitle = brevoMessageId
+    ? `Brevo message ID: ${brevoMessageId} — use this in Brevo's Activity Log to trace delivery`
+    : undefined;
   return (
     <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-      <Chip label={s.label} color={s.color} size="small" sx={{ fontSize: "0.65rem", fontWeight: 700 }} />
+      {msgIdTitle ? (
+        <Tooltip title={msgIdTitle} placement="top" arrow>
+          <Chip label={s.label} color={s.color} size="small" sx={{ fontSize: "0.65rem", fontWeight: 700, cursor: "help" }} />
+        </Tooltip>
+      ) : (
+        <Chip label={s.label} color={s.color} size="small" sx={{ fontSize: "0.65rem", fontWeight: 700 }} />
+      )}
       {emailStatus === "failed" && (
         <Tooltip title={emailError ?? "Email delivery failed"} placement="top" arrow>
           <Chip label="Email failed" color="error" variant="outlined" size="small" sx={{ fontSize: "0.6rem", cursor: "help" }} />

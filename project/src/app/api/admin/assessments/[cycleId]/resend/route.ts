@@ -48,14 +48,16 @@ export async function POST(
   // Upsert invitation: update existing or create new
   const existing = await Invitation.findOne({ employeeId, cycleId: params.cycleId });
 
-  let emailError: string | undefined;
+  let emailError:     string | undefined;
+  let brevoMessageId: string | null = null;
   try {
-    await sendAssessmentInvitation({
+    const result = await sendAssessmentInvitation({
       toEmail:      employee.email,
       employeeName: employee.fullName,
       cycleLabel:   cycle.label,
       expiresAt,
     });
+    brevoMessageId = result.messageId;
   } catch (err) {
     emailError = (err as Error).message ?? "Email send failed";
     console.error("[Resend] Email failed:", emailError);
@@ -65,19 +67,27 @@ export async function POST(
     existing.sentAt      = now;
     existing.expiresAt   = expiresAt;
     existing.resentAt    = now;
-    existing.status      = "pending";
+    // Don't overwrite "completed" — only reset statuses that represent a pending/failed send
+    if (existing.status !== "completed") existing.status = "pending";
     existing.emailStatus = emailError ? "failed" : "sent";
-    if (emailError) existing.emailError = emailError;
+    if (emailError) {
+      existing.emailError = emailError;
+    } else {
+      // Clear any stale error from a previous failed attempt
+      existing.set("emailError", undefined);
+      if (brevoMessageId) existing.brevoMessageId = brevoMessageId;
+    }
     await existing.save();
   } else {
     await Invitation.create({
       employeeId,
-      cycleId:     params.cycleId,
-      sentAt:      now,
+      cycleId:        params.cycleId,
+      sentAt:         now,
       expiresAt,
-      status:      "pending",
-      emailStatus: emailError ? "failed" : "sent",
+      status:         "pending",
+      emailStatus:    emailError ? "failed" : "sent",
       emailError,
+      brevoMessageId: brevoMessageId ?? undefined,
     });
   }
 

@@ -7,16 +7,17 @@ import mongoose, { Schema, Document, Model, Types } from "mongoose";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface IInvitation extends Document {
-  employeeId:   Types.ObjectId; // ref → Employee
-  cycleId:      Types.ObjectId; // ref → AssessmentCycle
-  sentAt:       Date;
-  expiresAt:    Date;           // sentAt + 7 days (UTC)
-  status:       "pending" | "opened" | "completed" | "resent" | "expired";
-  emailStatus:  "sent" | "failed";
-  emailError?:  string;
-  resentAt?:    Date;           // set when a resent replaces this invitation
-  createdAt:    Date;
-  updatedAt:    Date;
+  employeeId:      Types.ObjectId; // ref → Employee
+  cycleId:         Types.ObjectId; // ref → AssessmentCycle
+  sentAt:          Date;
+  expiresAt:       Date;           // sentAt + 7 days (UTC)
+  status:          "pending" | "opened" | "completed" | "resent" | "expired";
+  emailStatus:     "sent" | "failed";
+  emailError?:     string;
+  brevoMessageId?: string;         // Brevo-assigned ID for delivery tracing
+  resentAt?:       Date;           // set when a resent replaces this invitation
+  createdAt:       Date;
+  updatedAt:       Date;
 }
 
 const InvitationSchema = new Schema<IInvitation>(
@@ -30,9 +31,10 @@ const InvitationSchema = new Schema<IInvitation>(
       enum: ["pending", "opened", "completed", "resent", "expired"],
       default: "pending",
     },
-    emailStatus: { type: String, enum: ["sent", "failed"], default: "sent" },
-    emailError:  { type: String },
-    resentAt:    { type: Date },
+    emailStatus:     { type: String, enum: ["sent", "failed"], default: "sent" },
+    emailError:      { type: String },
+    brevoMessageId:  { type: String },
+    resentAt:        { type: Date },
   },
   { timestamps: true }
 );

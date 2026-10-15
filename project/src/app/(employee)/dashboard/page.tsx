@@ -39,7 +39,7 @@ interface UserData {
 interface ActiveCycle {
   id: string;
   label: string;
-  deadline: string;
+  deadline: string | null;
 }
 
 interface CertificateItem {
@@ -94,7 +94,7 @@ export default function EmployeeDashboardPage() {
         .map((n) => n[0])
         .slice(0, 2)
         .join("")
-        .toUpperCase() || "SW",
+        .toUpperCase() || "?",
     [user?.fullName],
   );
 

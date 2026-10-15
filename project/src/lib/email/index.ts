@@ -73,7 +73,7 @@ interface BrevoPayload {
   attachment?:  BrevoAttachment[];
 }
 
-async function sendBrevoEmail(payload: BrevoPayload, apiKey: string): Promise<void> {
+async function sendBrevoEmail(payload: BrevoPayload, apiKey: string): Promise<string | null> {
   const controller = new AbortController();
   const timer      = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
 
@@ -105,15 +105,17 @@ async function sendBrevoEmail(payload: BrevoPayload, apiKey: string): Promise<vo
     throw new Error(`[Email] Brevo API error: HTTP ${res.status}. ${snippet}`);
   }
 
-  // Log the Brevo message ID so delivery can be traced in Brevo's activity log.
+  // Return Brevo's message ID so callers can store it for delivery tracing.
   try {
     const body = await res.json() as { messageId?: string };
     if (body.messageId) {
       console.log(`[Email] Brevo accepted message. ID: ${body.messageId} → to: ${payload.to.map((r) => r.email).join(", ")}`);
+      return body.messageId;
     }
   } catch {
     // Response body unreadable — not a failure, Brevo already returned 2xx.
   }
+  return null;
 }
 
 // ── Assessment Invitation — HTML template ─────────────────────────────────────
@@ -310,7 +312,7 @@ export async function sendAssessmentInvitation(params: {
   employeeName: string;
   cycleLabel:   string;
   expiresAt:    Date;
-}): Promise<void> {
+}): Promise<{ messageId: string | null }> {
   const { apiKey, fromEmail, fromName, baseUrl } = getConfig();
 
   const loginUrl  = `${baseUrl}/login`;
@@ -325,7 +327,7 @@ export async function sendAssessmentInvitation(params: {
     loginUrl,
   };
 
-  await sendBrevoEmail(
+  const messageId = await sendBrevoEmail(
     {
       sender:      { name: fromName, email: fromEmail },
       to:          [{ email: params.toEmail, name: params.employeeName }],
@@ -335,6 +337,8 @@ export async function sendAssessmentInvitation(params: {
     },
     apiKey,
   );
+
+  return { messageId };
 }
 
 // ── Certificate Email ─────────────────────────────────────────────────────────
