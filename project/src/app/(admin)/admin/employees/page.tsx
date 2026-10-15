@@ -223,66 +223,100 @@ export default function AdminEmployeesPage() {
       )}
 
       <Card sx={{ borderRadius: 2 }}>
-        <Box sx={{ px: { xs: 2, sm: 2.5 }, pt: 2, pb: 1.5, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-          {/* Status filter chips — also serve as quick counts */}
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-            {(["all", "active", "inactive"] as const).map((f) => {
-              const count = f === "all" ? employees.length : employees.filter((e) => e.status === f).length;
-              const selected = statusFilter === f;
-              return (
-                <Chip
-                  key={f}
-                  label={`${f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)} (${count})`}
-                  icon={f === "active" ? <PersonOutlined /> : undefined}
-                  onClick={() => setStatusFilter(f)}
-                  color={selected && f === "active" ? "success" : selected ? "primary" : "default"}
-                  variant={selected ? "filled" : "outlined"}
-                  size="small"
-                  clickable
-                  sx={{ fontWeight: selected ? 700 : 400 }}
-                />
-              );
-            })}
+        <Box sx={{ px: { xs: 2, sm: 2.5 }, pt: 2.5, pb: 0 }}>
+          {/* Row 1: Status filter chips + search */}
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            sx={{ alignItems: { xs: "stretch", sm: "center" }, mb: 1.5, gap: 1.5, flexWrap: "wrap" }}
+          >
+            <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
+              {(["all", "active", "inactive"] as const).map((f) => {
+                const count = f === "all" ? employees.length : employees.filter((e) => e.status === f).length;
+                const selected = statusFilter === f;
+                return (
+                  <Chip
+                    key={f}
+                    label={`${f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)} (${count})`}
+                    icon={f === "active" ? <PersonOutlined /> : undefined}
+                    onClick={() => setStatusFilter(f)}
+                    color={selected && f === "active" ? "success" : selected ? "primary" : "default"}
+                    variant={selected ? "filled" : "outlined"}
+                    size="small"
+                    clickable
+                    sx={{
+                      fontWeight: selected ? 700 : 400,
+                      transition: "background-color 0.15s ease, border-color 0.15s ease",
+                      ...(!selected && {
+                        "&:hover": {
+                          bgcolor: "rgba(62, 11, 120, 0.05)",
+                          borderColor: "rgba(62, 11, 120, 0.28)",
+                        },
+                      }),
+                      ...(selected && f === "all" && {
+                        "&:hover": { bgcolor: "rgba(62, 11, 120, 0.15)" },
+                      }),
+                      ...(selected && f === "active" && {
+                        "&:hover": { bgcolor: "#C8E6C9" },
+                      }),
+                    }}
+                  />
+                );
+              })}
+            </Stack>
+            <TextField
+              size="small"
+              placeholder="Search name or email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchOutlined sx={{ fontSize: 18, color: colors.muted }} /></InputAdornment> } }}
+              sx={{ width: { xs: "100%", sm: 260 }, ml: { sm: "auto" } }}
+            />
           </Stack>
-          <TextField
-            size="small"
-            placeholder="Search name or email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchOutlined sx={{ fontSize: 18, color: colors.muted }} /></InputAdornment> } }}
-            sx={{ width: { xs: "100%", sm: 260 } }}
-          />
+
+          {/* Row 2: Bulk actions — shown only when there are employees to act on */}
+          {(activeCount > 0 || inactiveCount > 0) && (
+            <Box
+              sx={{
+                py: 1.25,
+                borderTop: "1px solid",
+                borderColor: "rgba(62, 11, 120, 0.08)",
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                flexWrap: "wrap",
+              }}
+            >
+              <Typography sx={{ fontSize: 11, fontWeight: 700, color: colors.muted, textTransform: "uppercase", letterSpacing: ".07em", flexShrink: 0, mr: 0.5 }}>
+                Bulk:
+              </Typography>
+              {activeCount > 0 && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  startIcon={<BlockOutlined />}
+                  onClick={() => { setBulkAction("deactivate"); setBulkError(""); setBulkDialogOpen(true); }}
+                  sx={{ fontSize: 12 }}
+                >
+                  Deactivate All ({activeCount})
+                </Button>
+              )}
+              {inactiveCount > 0 && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  startIcon={<CheckCircleOutlineOutlined />}
+                  onClick={() => { setBulkAction("activate"); setBulkError(""); setBulkDialogOpen(true); }}
+                  sx={{ fontSize: 12 }}
+                >
+                  Activate All ({inactiveCount})
+                </Button>
+              )}
+            </Box>
+          )}
         </Box>
-        {/* Bulk action buttons — shown only when there are employees to act on */}
-        {(activeCount > 0 || inactiveCount > 0) && (
-          <Box sx={{ px: { xs: 2, sm: 2.5 }, pb: 1.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
-            {activeCount > 0 && (
-              <Button
-                size="small"
-                variant="outlined"
-                color="warning"
-                startIcon={<BlockOutlined />}
-                onClick={() => { setBulkAction("deactivate"); setBulkError(""); setBulkDialogOpen(true); }}
-                sx={{ fontSize: 12 }}
-              >
-                Deactivate All ({activeCount})
-              </Button>
-            )}
-            {inactiveCount > 0 && (
-              <Button
-                size="small"
-                variant="outlined"
-                color="success"
-                startIcon={<CheckCircleOutlineOutlined />}
-                onClick={() => { setBulkAction("activate"); setBulkError(""); setBulkDialogOpen(true); }}
-                sx={{ fontSize: 12 }}
-              >
-                Activate All ({inactiveCount})
-              </Button>
-            )}
-          </Box>
-        )}
-        <Divider />
+        <Divider sx={{ mt: 1.25 }} />
         <TableContainer>
           <Table size="small">
             <TableHead>

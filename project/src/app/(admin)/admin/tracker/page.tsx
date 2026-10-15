@@ -297,7 +297,7 @@ export default function AdminTrackerPage() {
           </FormControl>
 
           {/* Result filter chips */}
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+          <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap" }}>
             {(["all", "Pass", "Fail"] as const).map((f) => {
               const selected = resultFilter === f;
               const color =
@@ -314,7 +314,25 @@ export default function AdminTrackerPage() {
                   variant={selected ? "filled" : "outlined"}
                   size="small"
                   clickable
-                  sx={{ fontWeight: selected ? 700 : 400 }}
+                  sx={{
+                    fontWeight: selected ? 700 : 400,
+                    transition: "background-color 0.15s ease, border-color 0.15s ease",
+                    ...(!selected && {
+                      "&:hover": {
+                        bgcolor: "rgba(62, 11, 120, 0.05)",
+                        borderColor: "rgba(62, 11, 120, 0.28)",
+                      },
+                    }),
+                    ...(selected && f === "all" && {
+                      "&:hover": { bgcolor: "rgba(62, 11, 120, 0.15)" },
+                    }),
+                    ...(selected && f === "Pass" && {
+                      "&:hover": { bgcolor: "#C8E6C9" },
+                    }),
+                    ...(selected && f === "Fail" && {
+                      "&:hover": { bgcolor: "#F5C8C8" },
+                    }),
+                  }}
                 />
               );
             })}
