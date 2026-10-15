@@ -38,7 +38,6 @@ import {
 } from "@mui/material";
 import {
   BlockOutlined,
-  BugReportOutlined,
   CalendarTodayOutlined,
   CheckCircleOutlined,
   ClearOutlined,
@@ -192,34 +191,6 @@ export default function AdminAssessmentsPage() {
   const [resendAllBusy,     setResendAllBusy]     = useState<Record<string, boolean>>({});
   const [operationMsg,      setOperationMsg]      = useState("");
   const [operationSeverity, setOperationSeverity] = useState<"info" | "success" | "warning" | "error">("info");
-
-  // ── Email delivery test ─────────────────────────────────────────────────────
-  const [emailTestBusy,   setEmailTestBusy]   = useState(false);
-  const [emailTestResult, setEmailTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
-
-  async function handleEmailTest() {
-    setEmailTestBusy(true);
-    setEmailTestResult(null);
-    try {
-      const res  = await fetch("/api/admin/email-test", { method: "POST" });
-      const json = await res.json();
-      if (json.success) {
-        setEmailTestResult({
-          ok:  true,
-          msg: json.message + (json.data?.messageId ? ` Brevo ID: ${json.data.messageId}` : ""),
-        });
-      } else {
-        setEmailTestResult({
-          ok:  false,
-          msg: json.error ?? "Test email failed.",
-        });
-      }
-    } catch {
-      setEmailTestResult({ ok: false, msg: "Network error during email test." });
-    } finally {
-      setEmailTestBusy(false);
-    }
-  }
 
   // ── Send new assessment dialog ──────────────────────────────────────────────
   const [sendOpen,     setSendOpen]     = useState(false);
@@ -449,18 +420,6 @@ export default function AdminAssessmentsPage() {
           </Typography>
         </Box>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ flexShrink: 0 }}>
-          <Tooltip title="Send a test email to your own address to verify Brevo delivery">
-            <Button
-              variant="outlined"
-              color="inherit"
-              startIcon={emailTestBusy ? <CircularProgress size={15} color="inherit" /> : <BugReportOutlined />}
-              disabled={emailTestBusy}
-              onClick={handleEmailTest}
-              sx={{ fontSize: 12.5, fontWeight: 600, color: colors.muted, borderColor: `${colors.muted}40` }}
-            >
-              {emailTestBusy ? "Sending…" : "Test Email"}
-            </Button>
-          </Tooltip>
           <Button
             variant="contained"
             startIcon={<SendOutlined />}
@@ -477,11 +436,6 @@ export default function AdminAssessmentsPage() {
       )}
       {operationMsg && (
         <Alert severity={operationSeverity} onClose={() => setOperationMsg("")} sx={{ mb: 2 }}>{operationMsg}</Alert>
-      )}
-      {emailTestResult && (
-        <Alert severity={emailTestResult.ok ? "success" : "error"} onClose={() => setEmailTestResult(null)} sx={{ mb: 2 }}>
-          {emailTestResult.msg}
-        </Alert>
       )}
 
       {/* ── Filter bar ─────────────────────────────────────────────────────── */}

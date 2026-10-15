@@ -1,13 +1,4 @@
-/**
- * Server-side email module — Brevo Transactional Email API v3.
- * Never import this in client components or pages marked "use client".
- *
- * Uses native fetch (available in Node 18+ / Next.js 14+) so no extra
- * package is required.
- *
- * NOTE: A 201 response from Brevo means the email was accepted for delivery;
- * it does not guarantee the message reached the recipient's inbox.
- */
+
 
 const BREVO_API_URL   = "https://api.brevo.com/v3/smtp/email";
 const SEND_TIMEOUT_MS = 10_000;
@@ -139,26 +130,31 @@ function buildInvitationHtml(p: {
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>Internal Assessment Ready | SEBSA Assessment Portal</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f0edf6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background-color:#ede9f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
 
-<!-- Hidden preheader text -->
-<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f0edf6;">
+<!-- Hidden preheader -->
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#ede9f7;">
 Your ${cycle} assessment is now open &mdash; complete it before ${exp}.&#160;&#847;&#847;&#847;&#847;&#847;&#847;&#847;&#847;&#847;&#847;&#847;
 </div>
 
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0edf6;">
-<tr><td align="center" style="padding:40px 16px;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#ede9f7;">
+<tr><td align="center" style="padding:36px 16px 48px;">
 
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
 
     <!-- ── Header ─────────────────────────────────────────── -->
     <tr>
-      <td style="background-color:#3E0B78;background:linear-gradient(135deg,#1a0a3d 0%,#3E0B78 55%,#6B21A8 100%);border-radius:12px 12px 0 0;padding:40px 40px 34px;text-align:center;">
+      <td style="background:linear-gradient(145deg,#120534 0%,#3E0B78 60%,#5b1fa8 100%);border-radius:14px 14px 0 0;padding:44px 44px 36px;text-align:center;">
 
-        <p style="margin:0 0 8px;color:#ffffff;font-size:23px;font-weight:700;letter-spacing:-0.3px;line-height:1.2;">
+        <!-- Icon circle -->
+        <div style="display:inline-block;width:52px;height:52px;border-radius:50%;background-color:rgba(255,255,255,0.12);margin-bottom:18px;line-height:52px;font-size:24px;text-align:center;">
+          &#128196;
+        </div>
+
+        <p style="margin:0 0 6px;color:#ffffff;font-size:24px;font-weight:800;letter-spacing:-0.5px;line-height:1.2;">
           Internal Assessment Ready
         </p>
-        <p style="margin:0;color:rgba(255,255,255,0.6);font-size:11.5px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;">
+        <p style="margin:0;color:rgba(255,255,255,0.55);font-size:11px;font-weight:700;letter-spacing:2.2px;text-transform:uppercase;">
           SEBSA Assessment Portal
         </p>
 
@@ -167,87 +163,116 @@ Your ${cycle} assessment is now open &mdash; complete it before ${exp}.&#160;&#8
 
     <!-- ── Body ───────────────────────────────────────────── -->
     <tr>
-      <td style="background-color:#ffffff;padding:38px 40px 34px;">
+      <td style="background-color:#ffffff;padding:40px 44px 36px;">
 
         <!-- Greeting -->
-        <p style="margin:0 0 6px;font-size:21px;font-weight:700;color:#1a0a3d;line-height:1.3;">
+        <p style="margin:0 0 4px;font-size:22px;font-weight:800;color:#120534;line-height:1.25;">
           Hi ${name},
+        </p>
+        <p style="margin:0 0 28px;font-size:14px;color:#8b8fa8;font-weight:500;letter-spacing:0.2px;">
+          You have a new assessment waiting for you.
         </p>
 
         <!-- Intro -->
-        <p style="margin:0 0 28px;font-size:15px;line-height:1.7;color:#374151;">
-          Your SEBSA Internal Assessment for
-          <strong style="color:#3E0B78;">${cycle}</strong>
-          is now open! Please log in to the SEBSA Internal Assessment Portal and
-          complete your assessment at your earliest convenience.
+        <p style="margin:0 0 32px;font-size:15px;line-height:1.75;color:#374151;">
+          Your SEBSA Internal Assessment for&nbsp;<strong style="color:#3E0B78;">${cycle}</strong>&nbsp;is
+          now open. Please log in to the portal and complete your assessment at your earliest convenience.
         </p>
 
-        <!-- CTA Button -->
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:34px;">
+        <!-- ── CTA: highlighted-text style ── -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:36px;">
           <tr>
-            <td align="center">
+            <td align="center" style="padding:4px 0 8px;">
+              <!-- Thin rule above -->
+              <div style="width:40px;height:2px;background-color:#ede9f7;margin:0 auto 20px;"></div>
+
+              <p style="margin:0 0 12px;font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:1.8px;text-transform:uppercase;">
+                Ready to begin?
+              </p>
+
+              <!-- Highlighted-text link — background sits tight behind the letters -->
               <a href="${url}" target="_blank"
-                 style="display:inline-block;background-color:#3E0B78;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:15px 44px;border-radius:8px;letter-spacing:0.3px;">
-                Start Assessment &rarr;
+                 style="font-size:22px;font-weight:900;text-decoration:none;color:#120534;letter-spacing:-0.3px;line-height:1.4;
+                        background-color:#d8b4fe;
+                        padding:3px 10px 5px;
+                        border-radius:5px;
+                        display:inline;">
+                Start Assessment &#8594;
               </a>
+
+              <!-- Fallback URL note for plain clients -->
+              <p style="margin:14px 0 0;font-size:11.5px;color:#9ca3af;">
+                Or copy this link:&nbsp;
+                <a href="${url}" style="color:#6d28d9;text-decoration:underline;word-break:break-all;">${url}</a>
+              </p>
+
+              <!-- Thin rule below -->
+              <div style="width:40px;height:2px;background-color:#ede9f7;margin:20px auto 0;"></div>
             </td>
           </tr>
         </table>
 
         <!-- Info card -->
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;border-radius:8px;overflow:hidden;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
           <tr>
-            <!-- Left accent bar -->
-            <td width="4" style="background-color:#3E0B78;">&nbsp;</td>
-            <!-- Card content -->
-            <td style="background-color:#f8f5ff;padding:20px 22px;border-radius:0 8px 8px 0;">
+            <td style="background-color:#f9f7ff;border-radius:10px;border:1px solid #ede9f7;padding:22px 24px;">
 
-              <p style="margin:0 0 14px;font-size:10px;font-weight:700;color:#3E0B78;text-transform:uppercase;letter-spacing:1.5px;">
-                Important Information
+              <p style="margin:0 0 16px;font-size:10px;font-weight:800;color:#6d28d9;text-transform:uppercase;letter-spacing:1.8px;">
+                Important Details
               </p>
 
-              <!-- Expiry -->
-              <p style="margin:0 0 10px;font-size:13.5px;color:#374151;line-height:1.6;">
-                <strong style="color:#1a0a3d;">Invitation Expiry:</strong>&nbsp;${exp}
-              </p>
-
-              <!-- Attempts -->
-              <p style="margin:0 0 10px;font-size:13.5px;color:#374151;line-height:1.6;">
-                <strong style="color:#1a0a3d;">Maximum Attempts:</strong>&nbsp;2 attempts
-              </p>
-
-              <!-- Retry -->
-              <p style="margin:0;font-size:13.5px;color:#374151;line-height:1.6;">
-                <strong style="color:#1a0a3d;">Retry Policy:</strong>&nbsp;If you score below 6
-                on your first attempt, you will be offered one retry using the same questions.
-              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="20" valign="top" style="padding-top:1px;font-size:14px;color:#6d28d9;">&#9679;</td>
+                  <td style="font-size:13.5px;color:#374151;line-height:1.65;padding-bottom:10px;">
+                    <strong style="color:#120534;">Invitation Expiry:</strong>&nbsp;${exp}
+                  </td>
+                </tr>
+                <tr>
+                  <td width="20" valign="top" style="padding-top:1px;font-size:14px;color:#6d28d9;">&#9679;</td>
+                  <td style="font-size:13.5px;color:#374151;line-height:1.65;padding-bottom:10px;">
+                    <strong style="color:#120534;">Maximum Attempts:</strong>&nbsp;2 attempts
+                  </td>
+                </tr>
+                <tr>
+                  <td width="20" valign="top" style="padding-top:1px;font-size:14px;color:#6d28d9;">&#9679;</td>
+                  <td style="font-size:13.5px;color:#374151;line-height:1.65;">
+                    <strong style="color:#120534;">Retry Policy:</strong>&nbsp;If you score below 6
+                    on your first attempt, you will be offered one retry.
+                  </td>
+                </tr>
+              </table>
 
             </td>
           </tr>
         </table>
 
         <!-- Expiry notice -->
-        <p style="margin:0 0 26px;font-size:13.5px;line-height:1.7;color:#6b7280;padding-top:22px;border-top:1px solid #f3f4f6;">
-          Please note that this invitation expires on
-          <strong style="color:#1a0a3d;">${exp}</strong>.
-          After that date, you will no longer be able to start the assessment through this
-          invitation. We encourage you to complete your assessment before the expiry date.
+        <p style="margin:0 0 28px;font-size:13px;line-height:1.7;color:#9ca3af;">
+          This invitation expires on <strong style="color:#374151;">${exp}</strong>.
+          After that date you will no longer be able to access the assessment through this link.
         </p>
 
         <!-- Sign-off -->
-        <p style="margin:0;font-size:14px;line-height:1.8;color:#374151;">
-          Best regards,<br>
-          <strong style="color:#1a0a3d;">HR Team</strong><br>
-          <span style="color:#9ca3af;font-size:12.5px;">Internal Assessment Portal</span>
-        </p>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="border-top:1px solid #f3f4f6;padding-top:22px;">
+              <p style="margin:0;font-size:14px;line-height:1.8;color:#374151;">
+                Best regards,<br>
+                <strong style="color:#120534;">HR Team</strong><br>
+                <span style="color:#9ca3af;font-size:12px;">SEBSA Internal Assessment Portal</span>
+              </p>
+            </td>
+          </tr>
+        </table>
 
       </td>
     </tr>
 
     <!-- ── Footer ─────────────────────────────────────────── -->
     <tr>
-      <td style="background-color:#f8f5ff;padding:20px 40px;border-top:1px solid #ede9fe;border-radius:0 0 12px 12px;text-align:center;">
-        <p style="margin:0;font-size:11.5px;color:#9ca3af;line-height:1.8;">
+      <td style="background-color:#f3f0fb;padding:18px 44px;border-top:1px solid #e5dffa;border-radius:0 0 14px 14px;text-align:center;">
+        <p style="margin:0;font-size:11px;color:#a8a4be;line-height:1.9;">
           This is an automated message from the SEBSA Internal Assessment Portal.<br>
           Please do not reply to this email.
         </p>
