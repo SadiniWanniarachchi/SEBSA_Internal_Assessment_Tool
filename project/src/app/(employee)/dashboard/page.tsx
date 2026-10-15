@@ -438,7 +438,7 @@ function CertRow({ cert }: { cert: CertificateItem }) {
   };
 
   const title = cert.cycleLabel
-    ? `SEBSA Internal Assessment — ${cert.cycleLabel}`
+    ? `SEBSA Assessment Portal — ${cert.cycleLabel}`
     : "SEBSA Assessment Certificate";
 
   const scoreColor = cert.score !== null

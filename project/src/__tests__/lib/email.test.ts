@@ -106,7 +106,7 @@ describe("sendAssessmentInvitation", () => {
     restore();
   });
 
-  it("uses the configured NEXT_PUBLIC_BASE_URL for the assessment link (not localhost)", async () => {
+  it("uses the configured NEXT_PUBLIC_BASE_URL for the login link (not localhost)", async () => {
     const restore = setEnv({
       BREVO_API_KEY:        FAKE_API_KEY,
       NEXT_PUBLIC_BASE_URL: "https://sebsa.vercel.app",
@@ -117,8 +117,9 @@ describe("sendAssessmentInvitation", () => {
 
     const [, init] = spy.mock.calls[0] as [string, RequestInit];
     const body     = JSON.parse(init.body as string);
-    expect(body.htmlContent).toContain("https://sebsa.vercel.app/assessment");
+    expect(body.htmlContent).toContain("https://sebsa.vercel.app/login");
     expect(body.htmlContent).not.toContain("localhost");
+    expect(body.textContent).toContain("https://sebsa.vercel.app/login");
     restore();
   });
 

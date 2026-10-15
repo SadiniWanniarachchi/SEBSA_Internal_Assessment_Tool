@@ -5,8 +5,8 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "SEBSA Internal Assessment",
-  description: "SEBSA Internal Knowledge Assessment Portal",
+  title: "SEBSA Assessment Portal",
+  description: "SEBSA Internal Assessment Portal",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
