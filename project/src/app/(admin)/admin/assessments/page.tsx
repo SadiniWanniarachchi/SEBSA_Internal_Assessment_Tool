@@ -41,6 +41,7 @@ import {
   CalendarTodayOutlined,
   CheckCircleOutlined,
   ClearOutlined,
+  DeleteOutlined,
   ExpandLess,
   ExpandMore,
   GroupsOutlined,
@@ -101,6 +102,7 @@ interface RecipientRow {
   employeeEmail:    string;
   invitationStatus: string;
   emailStatus:      string;
+  emailError:       string | null;
   sentAt:           string;
   expiresAt:        string;
   resentAt:         string | null;
@@ -171,12 +173,22 @@ export default function AdminAssessmentsPage() {
   const [recipients,         setRecipients]         = useState<Record<string, RecipientRow[]>>({});
   const [loadingRecipients,  setLoadingRecipients]  = useState<Record<string, boolean>>({});
   const [recipientError,     setRecipientError]     = useState<Record<string, string>>({});
+  const [resendingFor,       setResendingFor]       = useState<Record<string, boolean>>({});
 
   // ── Deactivate / reactivate dialog ─────────────────────────────────────────
   const [actionTarget,  setActionTarget]  = useState<AssessmentRecord | null>(null);
   const [actionType,    setActionType]    = useState<"deactivate" | "reactivate">("deactivate");
   const [actioning,     setActioning]     = useState(false);
   const [actionError,   setActionError]   = useState("");
+
+  // ── Delete dialog ───────────────────────────────────────────────────────────
+  const [deleteTarget,  setDeleteTarget]  = useState<AssessmentRecord | null>(null);
+  const [deleting,      setDeleting]      = useState(false);
+  const [deleteError,   setDeleteError]   = useState("");
+
+  // ── Resend all failed ───────────────────────────────────────────────────────
+  const [resendAllBusy, setResendAllBusy] = useState<Record<string, boolean>>({});
+  const [operationMsg,  setOperationMsg]  = useState("");
 
   // ── Send new assessment dialog ──────────────────────────────────────────────
   const [sendOpen,     setSendOpen]     = useState(false);
@@ -249,6 +261,67 @@ export default function AdminAssessmentsPage() {
       setRecipientError((p) => ({ ...p, [id]: "Network error." }));
     } finally {
       setLoadingRecipients((p) => ({ ...p, [id]: false }));
+    }
+  }
+
+  // ── Resend invitation ───────────────────────────────────────────────────────
+  async function handleResend(cycleId: string, employeeId: string) {
+    setResendingFor((p) => ({ ...p, [employeeId]: true }));
+    try {
+      await fetch(`/api/admin/assessments/${cycleId}/resend`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ employeeId }),
+      });
+      // Refresh recipient list for this cycle
+      const res  = await fetch(`/api/admin/assessments/${cycleId}/recipients`);
+      const json = await res.json();
+      if (json.success) {
+        setRecipients((p) => ({ ...p, [cycleId]: json.data }));
+      }
+    } catch {
+      // Network error — leave state as-is; user can retry
+    } finally {
+      setResendingFor((p) => ({ ...p, [employeeId]: false }));
+    }
+  }
+
+  // ── Delete cycle ────────────────────────────────────────────────────────────
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res  = await fetch(`/api/admin/cycles/${deleteTarget.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!json.success) {
+        setDeleteError(json.error ?? "Delete failed.");
+        return;
+      }
+      setRecipients((p) => { const n = { ...p }; delete n[deleteTarget.id]; return n; });
+      if (expandedId === deleteTarget.id) setExpandedId(null);
+      setDeleteTarget(null);
+      await fetchRecords();
+    } catch {
+      setDeleteError("Network error.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // ── Resend all failed invitations ───────────────────────────────────────────
+  async function handleResendAllFailed(cycleId: string) {
+    setResendAllBusy((p) => ({ ...p, [cycleId]: true }));
+    try {
+      const res  = await fetch(`/api/admin/assessments/${cycleId}/resend-failed`, { method: "POST" });
+      const json = await res.json();
+      if (json.message) setOperationMsg(json.message);
+      setRecipients((p) => { const n = { ...p }; delete n[cycleId]; return n; });
+      await fetchRecords();
+    } catch {
+      setOperationMsg("Network error during bulk resend.");
+    } finally {
+      setResendAllBusy((p) => ({ ...p, [cycleId]: false }));
     }
   }
 
@@ -346,6 +419,9 @@ export default function AdminAssessmentsPage() {
 
       {sendSuccess && (
         <Alert severity="success" onClose={() => setSendSuccess("")} sx={{ mb: 2 }}>{sendSuccess}</Alert>
+      )}
+      {operationMsg && (
+        <Alert severity="info" onClose={() => setOperationMsg("")} sx={{ mb: 2 }}>{operationMsg}</Alert>
       )}
 
       {/* ── Filter bar ─────────────────────────────────────────────────────── */}
@@ -520,8 +596,13 @@ export default function AdminAssessmentsPage() {
                 recipientRows={recipients[r.id] ?? null}
                 loadingRecipients={!!loadingRecipients[r.id]}
                 recipientError={recipientError[r.id] ?? ""}
+                resendingFor={resendingFor}
+                onResend={(employeeId) => handleResend(r.id, employeeId)}
                 onDeactivate={() => { setActionType("deactivate"); setActionTarget(r); setActionError(""); }}
                 onReactivate={() => { setActionType("reactivate"); setActionTarget(r); setActionError(""); }}
+                onDelete={() => { setDeleteTarget(r); setDeleteError(""); }}
+                resendAllBusy={!!resendAllBusy[r.id]}
+                onResendAllFailed={() => handleResendAllFailed(r.id)}
               />
             ))}
           </Stack>
@@ -571,8 +652,39 @@ export default function AdminAssessmentsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSendOpen(false)} color="inherit" disabled={sendBusy}>Cancel</Button>
-          <Button onClick={handleSend} variant="contained" disabled={sendBusy} startIcon={<SendOutlined />}>
+          <Button
+            onClick={handleSend}
+            variant="contained"
+            disabled={sendBusy}
+            startIcon={sendBusy ? <CircularProgress size={16} color="inherit" /> : <SendOutlined />}
+          >
             {sendBusy ? "Sending…" : "Send Assessment"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Delete confirmation dialog ────────────────────────────────────── */}
+      <Dialog open={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ color: ERR }}>Delete Assessment Cycle?</DialogTitle>
+        <DialogContent>
+          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
+          <DialogContentText>
+            This will <strong>permanently delete</strong> the cycle{" "}
+            <strong>{deleteTarget?.label}</strong> and all its invitation records.
+            <br /><br />
+            Assessment attempts, scores, and certificates are preserved. This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} color="inherit" disabled={deleting}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDelete}
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : <DeleteOutlined />}
+          >
+            {deleting ? "Deleting…" : "Delete Permanently"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -618,7 +730,9 @@ export default function AdminAssessmentsPage() {
 
 // ── CycleCard ──────────────────────────────────────────────────────────────────
 function CycleCard({
-  r, expanded, onToggle, recipientRows, loadingRecipients, recipientError, onDeactivate, onReactivate,
+  r, expanded, onToggle, recipientRows, loadingRecipients, recipientError,
+  resendingFor, onResend, onDeactivate, onReactivate, onDelete,
+  resendAllBusy, onResendAllFailed,
 }: {
   r: AssessmentRecord;
   expanded: boolean;
@@ -626,8 +740,13 @@ function CycleCard({
   recipientRows: RecipientRow[] | null;
   loadingRecipients: boolean;
   recipientError: string;
+  resendingFor: Record<string, boolean>;
+  onResend: (employeeId: string) => void;
   onDeactivate: () => void;
   onReactivate: () => void;
+  onDelete: () => void;
+  resendAllBusy: boolean;
+  onResendAllFailed: () => void;
 }) {
   const C = sebsaColors;
   const borderColor = r.status === "active" ? `${P}30` : r.status === "deactivated" ? "#FDE68A" : undefined;
@@ -671,6 +790,13 @@ function CycleCard({
                 </IconButton>
               </Tooltip>
             )}
+            {r.status !== "active" && (
+              <Tooltip title="Permanently delete this cycle">
+                <IconButton size="small" onClick={onDelete} sx={{ color: ERR, opacity: 0.7, "&:hover": { opacity: 1 } }}>
+                  <DeleteOutlined sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            )}
           </Stack>
         </Stack>
       </Box>
@@ -706,6 +832,25 @@ function CycleCard({
           </Box>
         ))}
       </Box>
+
+      {/* Resend all failed */}
+      {r.emailsFailed > 0 && (
+        <Box sx={{ px: { xs: 2, sm: 3 }, pb: 1.5 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            color="error"
+            startIcon={resendAllBusy ? <CircularProgress size={13} color="inherit" /> : <MailOutlined sx={{ fontSize: "15px !important" }} />}
+            disabled={resendAllBusy}
+            onClick={onResendAllFailed}
+            sx={{ fontSize: 12, fontWeight: 600 }}
+          >
+            {resendAllBusy
+              ? "Resending…"
+              : `Resend ${r.emailsFailed} Failed Email${r.emailsFailed !== 1 ? "s" : ""}`}
+          </Button>
+        </Box>
+      )}
 
       {/* Completion progress */}
       {r.recipients > 0 && (
@@ -771,7 +916,22 @@ function CycleCard({
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <InvStatusChip status={row.invitationStatus} emailStatus={row.emailStatus} />
+                        <InvStatusChip status={row.invitationStatus} emailStatus={row.emailStatus} emailError={row.emailError} />
+                        {row.emailStatus === "failed" && (
+                          <Button
+                            size="small"
+                            startIcon={
+                              resendingFor[row.employeeId]
+                                ? <CircularProgress size={11} color="inherit" />
+                                : <MailOutlined sx={{ fontSize: "13px !important" }} />
+                            }
+                            disabled={resendingFor[row.employeeId]}
+                            onClick={() => onResend(row.employeeId)}
+                            sx={{ mt: 0.5, fontSize: "0.65rem", py: 0.25, px: 0.75, minWidth: 0, display: "flex", color: P }}
+                          >
+                            {resendingFor[row.employeeId] ? "Resending…" : "Resend"}
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Typography sx={{ fontSize: 12 }}>
@@ -806,7 +966,7 @@ function CycleCard({
   );
 }
 
-function InvStatusChip({ status, emailStatus }: { status: string; emailStatus: string }) {
+function InvStatusChip({ status, emailStatus, emailError }: { status: string; emailStatus: string; emailError?: string | null }) {
   const map: Record<string, { label: string; color: "default" | "success" | "error" | "warning" | "info" }> = {
     pending:   { label: "Pending",   color: "default" },
     opened:    { label: "Opened",    color: "info" },
@@ -819,7 +979,9 @@ function InvStatusChip({ status, emailStatus }: { status: string; emailStatus: s
     <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
       <Chip label={s.label} color={s.color} size="small" sx={{ fontSize: "0.65rem", fontWeight: 700 }} />
       {emailStatus === "failed" && (
-        <Chip label="Email failed" color="error" variant="outlined" size="small" sx={{ fontSize: "0.6rem" }} />
+        <Tooltip title={emailError ?? "Email delivery failed"} placement="top" arrow>
+          <Chip label="Email failed" color="error" variant="outlined" size="small" sx={{ fontSize: "0.6rem", cursor: "help" }} />
+        </Tooltip>
       )}
     </Stack>
   );
