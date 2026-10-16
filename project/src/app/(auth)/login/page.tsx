@@ -9,7 +9,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -19,14 +18,16 @@ import { alpha } from "@mui/material/styles";
 import AlternateEmailIcon from "@mui/icons-material/AlternateEmail";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
-import SecurityOutlinedIcon from "@mui/icons-material/SecurityOutlined";
+import ArrowForwardIosRoundedIcon from "@mui/icons-material/ArrowForwardIosRounded";
+import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
+import MailOutlineRoundedIcon from "@mui/icons-material/MailOutlineRounded";
+import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { loginSchema, type LoginInput } from "@/schemas";
 
 const P    = "#3E0B78";
 const PD   = "#2E0858";
-const NAVY = "#0D1B3E";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,7 +38,6 @@ export default function LoginPage() {
   const {
     control,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -68,7 +68,7 @@ export default function LoginPage() {
   };
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", flexDirection: { xs: "column", lg: "row" }, minHeight: "100vh" }}>
 
       {/* ═══════════════════════════════════════════════════════════════════
           LEFT — Form panel
@@ -280,51 +280,6 @@ export default function LoginPage() {
             {loading ? <CircularProgress size={22} color="inherit" /> : "Log In"}
           </Button>
 
-          {/* Dev-only demo switcher */}
-          <Box>
-            <Divider sx={{ my: 0.5 }}>
-              <Typography
-                variant="caption"
-                sx={{ color: alpha("#6B7280", 0.65), fontSize: "0.67rem", fontWeight: 700, letterSpacing: "0.06em" }}
-              >
-                QUICK DEMO SWITCH
-              </Typography>
-            </Divider>
-            <Box sx={{ display: "flex", gap: 1.5, justifyContent: "center", mt: 1.5 }}>
-              <Button
-                type="button"
-                size="small"
-                variant="outlined"
-                onClick={() => {
-                  setValue("email", "sadini.wanniarachchi@sebsaworld.com");
-                  setValue("password", "emp123");
-                }}
-                sx={{
-                  borderRadius: "10px", fontSize: "0.71rem", py: 0.6, px: 1.8,
-                  borderColor: alpha(P, 0.25), color: P, fontWeight: 600,
-                  "&:hover": { borderColor: alpha(P, 0.4), bgcolor: alpha(P, 0.04) },
-                }}
-              >
-                Employee: Sadini
-              </Button>
-              <Button
-                type="button"
-                size="small"
-                variant="outlined"
-                onClick={() => {
-                  setValue("email", "admin@sebsaworld.com");
-                  setValue("password", "admin123");
-                }}
-                sx={{
-                  borderRadius: "10px", fontSize: "0.71rem", py: 0.6, px: 1.8,
-                  borderColor: alpha("#6B7280", 0.2), color: "text.secondary", fontWeight: 600,
-                  "&:hover": { borderColor: alpha("#6B7280", 0.35), bgcolor: alpha("#6B7280", 0.04) },
-                }}
-              >
-                Admin: System
-              </Button>
-            </Box>
-          </Box>
         </Box>
 
         {/* Footer */}
@@ -340,18 +295,52 @@ export default function LoginPage() {
           RIGHT — Visual panel (lg+ only)
       ═══════════════════════════════════════════════════════════════════ */}
       <Box
-        aria-hidden
         sx={{
-          display: { xs: "none", lg: "flex" },
-          flex: 1,
+          width: { xs: "100%", lg: "56%" },
+          minHeight: { xs: 560, lg: "100vh" },
+          display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           position: "relative",
           overflow: "hidden",
-          background: `linear-gradient(145deg, ${NAVY} 0%, #150830 45%, #2A0A5C 100%)`,
+          px: { xs: 3, sm: 6, lg: 7, xl: 11 },
+          py: { xs: 7, lg: 8 },
+          background: "linear-gradient(145deg, #F6F0FF 0%, #FBF9FE 52%, #EEE4FC 100%)",
         }}
       >
+        <Box sx={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 650 }}>
+          <Typography sx={{ color: P, fontSize: 12, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", mb: 1.5 }}>
+            SEBSA assessment platform
+          </Typography>
+          <Typography component="h1" sx={{ color: "#211239", fontSize: { xs: 32, sm: 40 }, fontWeight: 800, letterSpacing: "-1px", lineHeight: 1.12, mb: 2 }}>
+            Assessment, Simplified.
+          </Typography>
+          <Typography sx={{ color: "#635A75", fontSize: { xs: 15, sm: 16 }, lineHeight: 1.65, maxWidth: 500, mb: { xs: 5, lg: 6 } }}>
+            A seamless process for completing assessments, tracking progress, and recognizing achievement.
+          </Typography>
+          <Box component="ol" aria-label="Assessment process" sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: { xs: 2, sm: 0 }, listStyle: "none", p: 0, m: 0, width: "100%" }}>
+            {[
+              { icon: MailOutlineRoundedIcon, title: "Invitation Received", text: "Receive your assessment invitation." },
+              { icon: AssignmentTurnedInOutlinedIcon, title: "Complete Assessment", text: "Share your knowledge and progress." },
+              { icon: WorkspacePremiumOutlinedIcon, title: "Results & Certificate", text: "Earn recognition when you meet the criteria." },
+            ].map(({ icon: Icon, title, text }, index) => (
+              <Box component="li" key={title} sx={{ display: "flex", alignItems: { xs: "center", sm: "flex-start" }, flex: 1, position: "relative" }}>
+                {index > 0 && <Box aria-hidden sx={{ display: { xs: "none", sm: "block" }, position: "absolute", top: 27, left: 0, right: 0, height: 1, bgcolor: alpha(P, 0.2) }} />}
+                <Box sx={{ position: "relative", zIndex: 1, width: "100%", display: "flex", flexDirection: { xs: "row", sm: "column" }, alignItems: { xs: "center", sm: "flex-start" }, gap: { xs: 2, sm: 1.75 }, pr: { sm: 2 } }}>
+                  <Box sx={{ flex: "0 0 auto", width: 54, height: 54, borderRadius: "18px", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#FFFFFF", color: P, border: `1px solid ${alpha(P, 0.13)}`, boxShadow: `0 8px 20px ${alpha(P, 0.1)}` }}>
+                    <Icon sx={{ fontSize: 25 }} />
+                  </Box>
+                  <Box>
+                    <Typography sx={{ color: "#2C2043", fontSize: 13.5, fontWeight: 800, lineHeight: 1.3 }}>{title}</Typography>
+                    <Typography sx={{ color: "#746B84", fontSize: 12, lineHeight: 1.5, mt: 0.75 }}>{text}</Typography>
+                  </Box>
+                </Box>
+                {index < 2 && <ArrowForwardIosRoundedIcon aria-hidden sx={{ display: { xs: "none", sm: "block" }, position: "absolute", top: 20, right: 7, zIndex: 2, fontSize: 14, color: alpha(P, 0.42) }} />}
+              </Box>
+            ))}
+          </Box>
+        </Box>
         {/* ── Animated glow orbs ─────────────────────────────────────────────── */}
         <Box sx={{
           position: "absolute", top: "-20%", right: "-12%",
@@ -414,6 +403,7 @@ export default function LoginPage() {
           sx={{
             position: "relative", zIndex: 1,
             textAlign: "center",
+            display: "none",
             px: { lg: 6, xl: 8 }, py: 7,
             mx: { lg: 5, xl: 8 },
             borderRadius: "28px",
@@ -436,7 +426,6 @@ export default function LoginPage() {
               boxShadow: `0 8px 28px ${alpha("#000", 0.2)}`,
             }}
           >
-            <SecurityOutlinedIcon sx={{ fontSize: 40, color: "#fff" }} />
           </Box>
 
           <Typography
@@ -461,6 +450,7 @@ export default function LoginPage() {
         {/* ── Bottom wordmark ────────────────────────────────────────────────── */}
         <Typography
           sx={{
+            display: "none",
             position: "absolute", bottom: 24, left: 0, right: 0,
             textAlign: "center",
             fontSize: 10.5, color: alpha("#fff", 0.25),
