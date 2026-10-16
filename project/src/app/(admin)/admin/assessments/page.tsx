@@ -41,7 +41,6 @@ import {
   CalendarTodayOutlined,
   CheckCircleOutlined,
   ClearOutlined,
-  DeleteOutlined,
   ExpandLess,
   ExpandMore,
   GroupsOutlined,
@@ -182,11 +181,6 @@ export default function AdminAssessmentsPage() {
   const [actioning,     setActioning]     = useState(false);
   const [actionError,   setActionError]   = useState("");
 
-  // ── Delete dialog ───────────────────────────────────────────────────────────
-  const [deleteTarget,  setDeleteTarget]  = useState<AssessmentRecord | null>(null);
-  const [deleting,      setDeleting]      = useState(false);
-  const [deleteError,   setDeleteError]   = useState("");
-
   // ── Resend all failed ───────────────────────────────────────────────────────
   const [resendAllBusy,     setResendAllBusy]     = useState<Record<string, boolean>>({});
   const [operationMsg,      setOperationMsg]      = useState("");
@@ -291,29 +285,6 @@ export default function AdminAssessmentsPage() {
       setOperationSeverity("error");
     } finally {
       setResendingFor((p) => ({ ...p, [employeeId]: false }));
-    }
-  }
-
-  // ── Delete cycle ────────────────────────────────────────────────────────────
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    setDeleteError("");
-    try {
-      const res  = await fetch(`/api/admin/cycles/${deleteTarget.id}`, { method: "DELETE" });
-      const json = await res.json();
-      if (!json.success) {
-        setDeleteError(json.error ?? "Delete failed.");
-        return;
-      }
-      setRecipients((p) => { const n = { ...p }; delete n[deleteTarget.id]; return n; });
-      if (expandedId === deleteTarget.id) setExpandedId(null);
-      setDeleteTarget(null);
-      await fetchRecords();
-    } catch {
-      setDeleteError("Network error.");
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -614,7 +585,6 @@ export default function AdminAssessmentsPage() {
                 onResend={(employeeId) => handleResend(r.id, employeeId)}
                 onDeactivate={() => { setActionType("deactivate"); setActionTarget(r); setActionError(""); }}
                 onReactivate={() => { setActionType("reactivate"); setActionTarget(r); setActionError(""); }}
-                onDelete={() => { setDeleteTarget(r); setDeleteError(""); }}
                 resendAllBusy={!!resendAllBusy[r.id]}
                 onResendAllFailed={() => handleResendAllFailed(r.id)}
               />
@@ -677,32 +647,6 @@ export default function AdminAssessmentsPage() {
         </DialogActions>
       </Dialog>
 
-      {/* ── Delete confirmation dialog ────────────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ color: ERR }}>Delete Assessment Cycle?</DialogTitle>
-        <DialogContent>
-          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
-          <DialogContentText>
-            This will <strong>permanently delete</strong> the cycle{" "}
-            <strong>{deleteTarget?.label}</strong> and all its invitation records.
-            <br /><br />
-            Assessment attempts, scores, and certificates are preserved. This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)} color="inherit" disabled={deleting}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleDelete}
-            disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : <DeleteOutlined />}
-          >
-            {deleting ? "Deleting…" : "Delete Permanently"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
       {/* ── Deactivate / Reactivate confirmation dialog ────────────────────── */}
       <Dialog open={!!actionTarget} onClose={() => !actioning && setActionTarget(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ color: actionType === "deactivate" ? ERR : SUC }}>
@@ -745,7 +689,7 @@ export default function AdminAssessmentsPage() {
 // ── CycleCard ──────────────────────────────────────────────────────────────────
 function CycleCard({
   r, expanded, onToggle, recipientRows, loadingRecipients, recipientError,
-  resendingFor, onResend, onDeactivate, onReactivate, onDelete,
+  resendingFor, onResend, onDeactivate, onReactivate,
   resendAllBusy, onResendAllFailed,
 }: {
   r: AssessmentRecord;
@@ -758,7 +702,6 @@ function CycleCard({
   onResend: (employeeId: string) => void;
   onDeactivate: () => void;
   onReactivate: () => void;
-  onDelete: () => void;
   resendAllBusy: boolean;
   onResendAllFailed: () => void;
 }) {
@@ -801,13 +744,6 @@ function CycleCard({
               <Tooltip title="Reactivate this assessment cycle">
                 <IconButton size="small" color="success" onClick={onReactivate}>
                   <PlayCircleOutlined sx={{ fontSize: 18 }} />
-                </IconButton>
-              </Tooltip>
-            )}
-            {r.status !== "active" && (
-              <Tooltip title="Permanently delete this cycle">
-                <IconButton size="small" onClick={onDelete} sx={{ color: ERR, opacity: 0.7, "&:hover": { opacity: 1 } }}>
-                  <DeleteOutlined sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
             )}

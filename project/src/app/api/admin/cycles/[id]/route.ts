@@ -1,45 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import connectDB from "@/db";
-import { AssessmentCycle, AdminAuditLog, Invitation } from "@/db/models";
+import { AssessmentCycle, AdminAuditLog } from "@/db/models";
 
-// DELETE /api/admin/cycles/[id]
-// Permanently deletes a deactivated or closed cycle.
-// Cascade-deletes Invitations; preserves Attempts and Certificates.
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const adminId = requireRole(req, "admin");
-  if (!adminId) return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-
-  const { id } = params;
-  await connectDB();
-
-  const cycle = await AssessmentCycle.findById(id);
-  if (!cycle) {
-    return NextResponse.json({ success: false, error: "Cycle not found." }, { status: 404 });
+// Keep legacy DELETE callers safe without connecting to or mutating the database.
+export async function DELETE(req: NextRequest) {
+  if (!requireRole(req, "admin")) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
-
-  if (cycle.status === "active") {
-    return NextResponse.json(
-      { success: false, error: "Cannot delete an active cycle. Deactivate it first." },
-      { status: 409 }
-    );
-  }
-
-  await Invitation.deleteMany({ cycleId: id });
-  await AssessmentCycle.findByIdAndDelete(id);
-
-  await AdminAuditLog.create({
-    adminId,
-    action:     "cycle_deleted",
-    targetId:   cycle._id,
-    targetType: "cycle",
-    metadata:   { label: cycle.label },
-  }).catch(() => {});
-
-  return NextResponse.json({ success: true });
+  return NextResponse.json(
+    { success: false, error: "Assessment cycles cannot be deleted. Deactivate the cycle instead." },
+    { status: 405, headers: { Allow: "PATCH" } }
+  );
 }
 
 // PATCH /api/admin/cycles/[id]

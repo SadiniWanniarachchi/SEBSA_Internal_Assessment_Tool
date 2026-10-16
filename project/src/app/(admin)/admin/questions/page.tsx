@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -89,6 +89,9 @@ export default function AdminQuestionsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [statusError, setStatusError] = useState("");
+  const [updatingStatus, setUpdatingStatus] = useState<Record<string, boolean>>({});
+  const pendingStatus = useRef(new Set<string>());
 
   useEffect(() => {
     async function load() {
@@ -157,13 +160,43 @@ export default function AdminQuestionsPage() {
   }
 
   async function toggleStatus(q: Question) {
+    if (pendingStatus.current.has(q.id)) return;
+    pendingStatus.current.add(q.id);
+    setUpdatingStatus((prev) => ({ ...prev, [q.id]: true }));
+    setStatusError("");
     const newStatus = q.status === "active" ? "inactive" : "active";
-    await fetch(`/api/questions/${q.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
-    await fetchQuestions();
+    const replaceQuestion = (question: Question) =>
+      setQuestions((prev) => prev.map((item) => item.id === q.id ? question : item));
+    replaceQuestion({ ...q, status: newStatus });
+    try {
+      const res = await fetch(`/api/questions/${q.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success || !json.data) {
+        throw new Error(json.error || "Failed to update question status.");
+      }
+      replaceQuestion(json.data);
+    } catch (err) {
+      replaceQuestion(q);
+      setStatusError(err instanceof Error ? err.message : "Failed to update question status.");
+      // A network failure may happen after the server commits. Reconcile if reachable.
+      try {
+        const res = await fetch("/api/questions", { cache: "no-store" });
+        const json = await res.json();
+        if (res.ok && json.success) {
+          const persisted = json.data.find((item: Question) => item.id === q.id);
+          if (persisted) replaceQuestion(persisted);
+        }
+      } catch {
+        setStatusError("Unable to confirm question status. Please reload when your connection returns.");
+      }
+    } finally {
+      pendingStatus.current.delete(q.id);
+      setUpdatingStatus((prev) => ({ ...prev, [q.id]: false }));
+    }
   }
 
   const filtered = questions.filter(
@@ -203,6 +236,11 @@ export default function AdminQuestionsPage() {
         </Button>
       </Stack>
 
+      {statusError && (
+        <Alert severity="error" onClose={() => setStatusError("")} sx={{ mb: 2 }}>
+          {statusError}
+        </Alert>
+      )}
       {success && (
         <Alert severity="success" onClose={() => setSuccess("")} sx={{ mb: 2 }}>
           {success}
@@ -270,12 +308,23 @@ export default function AdminQuestionsPage() {
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
                         <Tooltip title="Edit">
-                          <IconButton size="small" onClick={() => openEdit(q)}>
+                          <IconButton size="small" disabled={updatingStatus[q.id]} onClick={() => openEdit(q)}>
                             <EditOutlined sx={{ fontSize: 16 }} />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title={q.status === "active" ? "Deactivate" : "Activate"}>
-                          <IconButton size="small" onClick={() => toggleStatus(q)} color={q.status === "active" ? "warning" : "success"}>
+                          <IconButton
+                            size="small"
+                            onClick={() => toggleStatus(q)}
+                            disabled={updatingStatus[q.id]}
+                            role="switch"
+                            aria-checked={q.status === "active"}
+                            aria-label={`${q.status === "active" ? "Deactivate" : "Activate"} question: ${q.questionText}`}
+                            sx={{
+                              color: q.status === "active" ? "#129B14" : "#A30D0D",
+                              "&.Mui-disabled": { color: q.status === "active" ? "#129B14" : "#A30D0D", opacity: 0.6 },
+                            }}
+                          >
                             {q.status === "active"
                               ? <ToggleOnOutlined sx={{ fontSize: 18 }} />
                               : <ToggleOffOutlined sx={{ fontSize: 18 }} />}
