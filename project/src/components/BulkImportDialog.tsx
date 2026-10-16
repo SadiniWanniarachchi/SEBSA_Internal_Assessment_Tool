@@ -10,6 +10,7 @@ import { alpha } from "@mui/material/styles";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
+import * as XLSX from "xlsx";
 
 const P = "#3E0B78";
 
@@ -160,6 +161,19 @@ export function BulkImportDialog({ open, onClose, onImported }: BulkImportDialog
     URL.revokeObjectURL(url);
   }
 
+  function downloadTemplate() {
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Employee Name", "Email"],
+      ["", ""],
+    ]);
+    worksheet["!cols"] = [{ wch: 28 }, { wch: 34 }];
+    worksheet["!autofilter"] = { ref: "A1:B2" };
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
+    XLSX.writeFile(workbook, "employee-import-template.xlsx");
+  }
+
   // ── Step: Upload ────────────────────────────────────────────────────────────
 
   function renderUpload() {
@@ -171,6 +185,16 @@ export function BulkImportDialog({ open, onClose, onImported }: BulkImportDialog
             and email address. Column names like <strong>Name</strong>, <strong>Full Name</strong>,{" "}
             <strong>Email</strong>, and <strong>Email Address</strong> are all recognised.
           </Typography>
+
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={downloadTemplate}
+            sx={{ mb: 2.5, textTransform: "none" }}
+          >
+            Download Excel template
+          </Button>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
