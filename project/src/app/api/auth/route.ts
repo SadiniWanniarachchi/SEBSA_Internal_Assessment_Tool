@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
       Employee.findById(payload.sub).select("-passwordHash").lean(),
       AssessmentCycle.findOne({ status: "active" }).lean(),
       Attempt.find({ employeeId: payload.sub })
-        .select("_id cycleId score submittedAt")
+        .select("_id cycleId score submittedAt isFinal")
         .populate({ path: "cycleId", select: "label" })
         .lean(),
     ]);
@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
         .lean(),
       activeCycle
         ? Invitation.findOne({ employeeId: employee._id, cycleId: activeCycle._id })
-            .select("expiresAt")
+            .select("expiresAt status")
             .lean()
         : Promise.resolve(null),
     ]);
@@ -173,6 +173,11 @@ export async function GET(req: NextRequest) {
     // canRetry: attempt 1 done but not final (score < RETRY_THRESHOLD, retry available)
     const canRetry = !!(latestAttempt && !latestAttempt.isFinal);
     const currentAttempt = latestAttempt;
+
+    // Count finalized cycles, not submissions: a retry is not a second assessment.
+    const completedAssessmentCount = new Set(allAttempts
+      .filter(a => a.isFinal && a.submittedAt && a.cycleId?._id != null)
+      .map(a => a.cycleId._id.toString())).size;
 
     // O(1) lookup instead of O(n²) nested scan
     const attemptById = new Map(allAttempts.map(a => [a._id.toString(), a]));
@@ -202,6 +207,10 @@ export async function GET(req: NextRequest) {
         activeCycle: activeCycle ? {
           id: activeCycle._id.toString(),
           label: activeCycle.label,
+          invitation: invitation ? {
+            expiresAt: invitation.expiresAt,
+            status: invitation.status,
+          } : null,
           deadline: invitation?.expiresAt
             ? new Date(invitation.expiresAt).toLocaleDateString("en-GB", {
                 day: "numeric", month: "long", year: "numeric",
@@ -209,6 +218,7 @@ export async function GET(req: NextRequest) {
             : null,
         } : null,
         pendingAssessment,
+        completedAssessmentCount,
         canRetry,
         currentAttempt: currentAttempt ? {
           id: currentAttempt._id.toString(),

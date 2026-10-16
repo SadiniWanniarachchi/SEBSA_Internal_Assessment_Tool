@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Avatar from "@mui/material/Avatar";
@@ -18,7 +19,6 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 const P  = "#3E0B78";
-const PD = "#2E0858";
 
 export interface NavbarProps {
   userName?: string;
@@ -39,20 +39,27 @@ export function Navbar({
   showLogout = true,
   height = { xs: 60, sm: 68 },
 }: NavbarProps) {
-  const router = useRouter();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const initials = userName
     ? userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-    : "SW";
+    : "?";
 
   const handleLogout = async () => {
     if (loggingOut) return;
     setMenuAnchor(null);
     setLoggingOut(true);
-    await fetch("/api/auth", { method: "DELETE" });
-    window.location.href = "/login";
+    setLogoutError(null);
+    try {
+      const response = await fetch("/api/auth", { method: "DELETE" });
+      if (!response.ok) throw new Error("Logout failed");
+      window.location.href = "/login";
+    } catch {
+      setLogoutError("Unable to log out. Please try again.");
+      setLoggingOut(false);
+    }
   };
 
   return (
@@ -65,6 +72,7 @@ export function Navbar({
         position: "sticky",
         top: 0,
         zIndex: 1200,
+        "& :focus-visible": { outline: `3px solid ${P}`, outlineOffset: "3px" },
       }}
     >
       <Box
@@ -90,9 +98,12 @@ export function Navbar({
           )}
           {showLogo && (
             <Box
+              component={Link}
+              href={homeUrl}
+              aria-label="SEBSA home"
               sx={{ display: "flex", alignItems: "center", cursor: "pointer", flexShrink: 0 }}
-              onClick={() => router.push(homeUrl)}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/sebsa-logo.png"
                 alt="SEBSA"
@@ -104,6 +115,9 @@ export function Navbar({
 
         {/* Right: user button */}
         <Button
+          aria-label={userName ? `Account menu for ${userName}` : "Account menu"}
+          aria-haspopup="menu"
+          aria-expanded={Boolean(menuAnchor)}
           onClick={(e) => setMenuAnchor(e.currentTarget)}
           endIcon={
             menuAnchor
@@ -142,6 +156,8 @@ export function Navbar({
               fontWeight: 500,
               color: "text.primary",
               fontSize: "0.85rem",
+              maxWidth: { sm: 240, md: 360 },
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}
           >
             {userEmail}
@@ -182,6 +198,7 @@ export function Navbar({
           )}
         </Menu>
       </Box>
+      {logoutError && <Alert severity="error" onClose={() => setLogoutError(null)}>{logoutError}</Alert>}
     </Box>
   );
 }

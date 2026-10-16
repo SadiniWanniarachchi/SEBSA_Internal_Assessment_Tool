@@ -1,46 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowForward,
-  CheckCircleOutlined,
-  CalendarToday,
-  Download,
-  EmailOutlined,
-  FilePresentOutlined,
-  MilitaryTechOutlined,
-  PersonOutlined,
-  ReplayOutlined,
-  SecurityOutlined,
+  ArrowForward, AssignmentOutlined, CalendarTodayOutlined, CheckCircleOutlined,
+  DownloadOutlined, HistoryOutlined, InboxOutlined, WorkspacePremiumOutlined,
 } from "@mui/icons-material";
-import {
-  Avatar,
-  Box,
-  Button,
-  Card,
-  CircularProgress,
-  Container,
-  Divider,
-  Skeleton,
-  Stack,
-  Typography,
-} from "@mui/material";
-import { sebsaColors } from "@/lib/theme";
+import { Alert, Box, Button, Card, Chip, CircularProgress, Container, Divider, Skeleton, Stack, Typography } from "@mui/material";
 import { Navbar } from "@/components/Navbar";
-
-interface UserData {
-  id: string;
-  fullName: string;
-  email: string;
-}
-
-interface ActiveCycle {
-  id: string;
-  label: string;
-  deadline: string | null;
-}
+import { sebsaColors } from "@/lib/theme";
 
 interface CertificateItem {
   id: string;
@@ -50,480 +19,284 @@ interface CertificateItem {
   cycleLabel: string | null;
 }
 
-const C = sebsaColors;
-const P = C.primary;
+interface DashboardData {
+  user: { id: string; fullName: string; email: string; role: string };
+  activeCycle: {
+    id: string;
+    label: string;
+    deadline: string | null;
+    invitation: { expiresAt: string; status: string } | null;
+  } | null;
+  pendingAssessment: boolean;
+  canRetry: boolean;
+  currentAttempt: { score: number; passed: boolean; isFinal: boolean; attemptNumber: number; submittedAt?: string } | null;
+  completedAssessmentCount?: number;
+  certificates: CertificateItem[];
+}
+
+const P = sebsaColors.primary;
+const muted = "#665F73";
+const surface = { border: "1px solid #E7E1EF", borderRadius: "16px", boxShadow: "0 3px 14px rgba(34,20,52,0.025)" };
+const iconBox = { width: 42, height: 42, display: "grid", placeItems: "center", borderRadius: "12px", bgcolor: "#F4EEFB", color: P, flexShrink: 0 };
+const dateLabel = (date: string) => new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 export default function EmployeeDashboardPage() {
   const router = useRouter();
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<UserData | null>(null);
-  const [activeCycle, setActiveCycle] = useState<ActiveCycle | null>(null);
-  const [pendingAssessment, setPendingAssessment] = useState(true);
-  const [canRetry, setCanRetry] = useState(false);
-  const [currentAttempt, setCurrentAttempt] = useState<{ score: number; passed?: boolean; isFinal?: boolean } | null>(null);
-  const [certificates, setCertificates] = useState<CertificateItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  // Reuse an in-flight request during React Strict Mode's effect replay.
+  const request = useRef<Promise<DashboardData> | null>(null);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const res = await fetch("/api/auth");
+    let disposed = false;
+    setLoading(true);
+    setError(null);
+    if (!request.current) {
+      request.current = (async () => {
+        const res = await fetch("/api/auth", { cache: "no-store" });
+        if ([401, 403, 404].includes(res.status)) throw new Error("SESSION_REQUIRED");
         const json = await res.json();
-        if (!json.success || json.data.user.role !== "employee") {
-          router.replace("/login");
-          return;
-        }
-        setUser(json.data.user);
-        setActiveCycle(json.data.activeCycle);
-        setPendingAssessment(json.data.pendingAssessment);
-        setCanRetry(json.data.canRetry ?? false);
-        setCurrentAttempt(json.data.currentAttempt);
-        setCertificates(json.data.certificates ?? []);
-      } catch {
-        router.replace("/login");
-      } finally {
-        setLoading(false);
-      }
+        if (!res.ok || !json.success) throw new Error(json.error || "Unable to load your dashboard.");
+        if (json.data.user.role !== "employee") throw new Error("SESSION_REQUIRED");
+        return json.data as DashboardData;
+      })();
     }
-    loadData();
-  }, [router]);
+    const pending = request.current;
+    pending.then(value => {
+      if (!disposed) { setData(value); setNow(Date.now()); }
+    }).catch((cause: unknown) => {
+      if (disposed) return;
+      if (cause instanceof Error && cause.message === "SESSION_REQUIRED") {
+        router.replace("/login");
+      } else {
+        setError("We couldn't load your dashboard. Please check your connection and try again.");
+      }
+    }).finally(() => {
+      if (request.current === pending) request.current = null;
+      if (!disposed) setLoading(false);
+    });
+    return () => { disposed = true; };
+  }, [router, reload]);
 
-  const initials = useMemo(
-    () =>
-      user?.fullName
-        ?.split(" ")
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase() || "?",
-    [user?.fullName],
-  );
+  const cycle = data?.activeCycle;
+  const invitation = cycle?.invitation;
+  const expiresAt = invitation ? new Date(invitation.expiresAt).getTime() : NaN;
+  // Keep actions accurate if the invitation expires while this page is open.
+  useEffect(() => {
+    if (!Number.isFinite(expiresAt) || expiresAt < now || invitation?.status === "completed") return;
+    const update = () => setNow(Date.now());
+    const timer = window.setTimeout(update, Math.max(0, Math.min(expiresAt - Date.now() + 1, 2147483647)));
+    const onVisible = () => { if (document.visibilityState === "visible") update(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [expiresAt, now, invitation?.status]);
+
+  // Match the existing server's completed-invitation expiry exception.
+  const expired = !!invitation && invitation.status !== "completed" && expiresAt < now;
+  const eligible = !!cycle && !!invitation && Number.isFinite(expiresAt) && !expired;
+  const actionable = eligible && !!data && (data.pendingAssessment || data.canRetry) && !data.currentAttempt?.isFinal;
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#F7F5FB", color: C.ink }}>
-      <Navbar userName={user?.fullName} userEmail={user?.email} />
-
-      <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4 }, py: { xs: 3, sm: 4, md: 5 } }}>
-        {loading ? (
-          <DashboardSkeleton />
-        ) : (
-          <Stack
-            direction={{ xs: "column", lg: "row" }}
-            spacing={{ xs: 2.5, md: 3 }}
-            sx={{ alignItems: { xs: "stretch", lg: "flex-start" } }}
-          >
-            {/* ── Profile card ─────────────────────────────────────────────── */}
-            <Box sx={{ width: { xs: "100%", lg: 360 }, flexShrink: 0 }}>
-              <Card sx={{ borderRadius: 3, overflow: "hidden", boxShadow: "0 4px 24px rgba(62,11,120,0.09)" }}>
-                {/* Gradient header */}
-                <Box
-                  sx={{
-                    background: `linear-gradient(135deg, ${P} 0%, #6A2FBE 100%)`,
-                    pt: 4, pb: 6, px: 3,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    textAlign: "center",
-                    position: "relative",
-                  }}
-                >
-                  {/* Subtle decorative circles */}
-                  <Box sx={{ position: "absolute", top: -18, right: -18, width: 80, height: 80, borderRadius: "50%", background: "rgba(255,255,255,0.07)" }} />
-                  <Box sx={{ position: "absolute", bottom: 12, left: -14, width: 55, height: 55, borderRadius: "50%", background: "rgba(255,255,255,0.05)" }} />
-
-                  {/* Avatar */}
-                  <Box sx={{ position: "relative", zIndex: 1 }}>
-                    <Avatar
-                      sx={{
-                        width: 76, height: 76,
-                        fontSize: 26, fontWeight: 800,
-                        bgcolor: "rgba(255,255,255,0.18)",
-                        color: "#fff",
-                        border: "3px solid rgba(255,255,255,0.35)",
-                      }}
-                    >
-                      {initials}
-                    </Avatar>
-                    <Box sx={{ position: "absolute", right: 2, bottom: 2, width: 14, height: 14, bgcolor: C.success, border: "3px solid rgba(255,255,255,0.6)", borderRadius: "50%" }} />
-                  </Box>
-                </Box>
-
-                {/* Pull avatar overlap */}
-                <Box sx={{ mt: -0.5, px: 3, pb: 3 }}>
-                  {/* Profile fields — Name and Email only (Req 8) */}
-                  <Stack spacing={0} divider={<Divider flexItem />}>
-                    <ProfileField icon={<PersonOutlined />} label="NAME"  value={user?.fullName} />
-                    <ProfileField icon={<EmailOutlined />}  label="EMAIL" value={user?.email} mono />
-                  </Stack>
-                </Box>
-              </Card>
+    <Box sx={{
+      minHeight: "100vh", bgcolor: "#F8F9FB", color: "#292634",
+      "& :focus-visible": { outline: `3px solid ${P}`, outlineOffset: "3px" },
+    }}>
+      <Navbar userName={data?.user.fullName} userEmail={data?.user.email} />
+      <Container component="main" maxWidth="lg" sx={{ py: { xs: 3, sm: 4 }, px: { xs: 2, sm: 3 } }}>
+        {loading && !data ? <DashboardSkeleton /> : error ? (
+          <Alert severity="error" action={<Button color="inherit" onClick={() => setReload(n => n + 1)}>Try again</Button>}>
+            {error}
+          </Alert>
+        ) : data ? (
+          <Stack spacing={3}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ color: P, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", mb: 0.75 }}>Employee portal</Typography>
+                <Typography component="h1" sx={{ fontSize: { xs: 24, sm: 28 }, fontWeight: 750, letterSpacing: "-0.6px", overflowWrap: "anywhere" }}>
+                  Welcome back{data.user.fullName ? `, ${data.user.fullName}` : ""}
+                </Typography>
+                <Typography sx={{ mt: 0.75, fontSize: 14, color: muted }}>Your assessments and achievements, all in one place.</Typography>
+              </Box>
+              <Button component={Link} href="/certificates" startIcon={<WorkspacePremiumOutlined />} variant="outlined" sx={{ bgcolor: "#FFF", flexShrink: 0 }}>
+                My Certificates
+              </Button>
             </Box>
 
-            {/* ── Right column ─────────────────────────────────────────────── */}
-            <Stack spacing={2.5} sx={{ flex: 1, minWidth: 0 }}>
-              {/* Assessment banner */}
-              <AssessmentBanner
-                pending={pendingAssessment}
-                canRetry={canRetry}
-                cycle={activeCycle}
-                attempt={currentAttempt}
-              />
+            <Box component="section" aria-label="Assessment overview" sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: `repeat(${typeof data.completedAssessmentCount === "number" ? 3 : 2}, minmax(0, 1fr))` }, gap: 2 }}>
+              <Metric label="Pending assessments" value={actionable ? 1 : 0} caption="Available to start or retry" icon={<AssignmentOutlined />} />
+              {typeof data.completedAssessmentCount === "number" && <Metric label="Completed assessments" value={data.completedAssessmentCount} caption="Finalized across all cycles" icon={<CheckCircleOutlined />} />}
+              <Metric label="Certificates earned" value={data.certificates.length} caption="Your issued certificates" icon={<WorkspacePremiumOutlined />} />
+            </Box>
 
-              {/* Certificate history */}
-              <Card sx={{ borderRadius: 2.5, overflow: "hidden", boxShadow: "0 4px 20px rgba(62,11,120,0.07)" }}>
-                <Box sx={{ px: { xs: 2.25, sm: 3 }, py: { xs: 2, sm: 2.5 }, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
-                  <Box>
-                    <Typography sx={{ fontSize: { xs: 18, sm: 20 }, fontWeight: 800, letterSpacing: "-0.3px" }}>
-                      Certificate History
-                    </Typography>
-                    <Typography sx={{ mt: 0.35, fontSize: 13, color: C.muted }}>
-                      Verified assessment completion credentials
-                    </Typography>
-                  </Box>
-                  {certificates.length > 0 && (
-                    <Box sx={{ px: 1.25, py: 0.6, bgcolor: C.lavender, border: `1px solid ${C.line}`, borderRadius: 1.5 }}>
-                      <Typography sx={{ fontSize: 11, color: P, fontWeight: 800, letterSpacing: ".05em" }}>
-                        {certificates.length} PASSED
+            <Card component="section" aria-labelledby="assessment-heading" sx={surface}>
+              <Box sx={{ px: { xs: 2.5, sm: 3 }, py: 2, borderBottom: "1px solid #EEEAF3" }}>
+                <Typography id="assessment-heading" component="h2" sx={{ fontSize: 17, fontWeight: 700 }}>Your assessment</Typography>
+              </Box>
+              {!cycle || (!invitation && !data.currentAttempt) ? (
+                <EmptyState icon={<InboxOutlined />} title="No assessments available" text="Your assigned assessment will appear here when an invitation is available. Check your email for updates from HR." />
+              ) : (
+                <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
+                  <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
+                    <Box sx={{ ...iconBox, display: { xs: "none", sm: "grid" } }}><AssignmentOutlined /></Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", mb: 1 }}>
+                        <Typography component="h3" sx={{ fontSize: 18, fontWeight: 700, overflowWrap: "anywhere" }}>{cycle.label}</Typography>
+                        <Chip label={data.currentAttempt?.isFinal ? (data.currentAttempt.passed ? "Passed" : "Completed") : expired ? "Invitation expired" : !actionable ? "Unavailable" : data.canRetry ? "Retry available" : "Ready to start"} sx={{ bgcolor: "#F1EAF9", color: P, fontSize: 11, fontWeight: 700 }} />
+                      </Box>
+                      <Typography sx={{ fontSize: 14, color: muted, lineHeight: 1.65 }}>
+                        {data.currentAttempt?.isFinal
+                          ? `Your final score is ${data.currentAttempt.score}/10. ${data.currentAttempt.passed ? "You met the passing criteria." : "The passing criteria were not met."}`
+                          : expired ? "This invitation has expired. Contact HR or your administrator for a new invitation."
+                          : !eligible ? "No valid invitation is available. Contact HR for assistance."
+                          : !actionable ? "This assessment is not currently available to start. Contact HR for assistance."
+                          : data.canRetry && data.currentAttempt ? `You scored ${data.currentAttempt.score}/10 on your first attempt. One second attempt is available with the same questions.`
+                          : "Your assessment is ready. Open it to review the instructions and begin."}
                       </Typography>
+                      {data.currentAttempt?.isFinal && !eligible && (
+                        <Typography sx={{ mt: 1, fontSize: 13, color: muted }}>
+                          {expired ? "Your invitation has expired." : "No valid invitation is available."} Contact HR to access the result review. Your issued certificates remain available below.
+                        </Typography>
+                      )}
+                      {invitation && Number.isFinite(expiresAt) && !data.currentAttempt?.isFinal && (
+                        <Stack direction="row" spacing={1} sx={{ mt: 2, alignItems: "flex-start", color: muted }}>
+                          <CalendarTodayOutlined sx={{ fontSize: 16, mt: "2px" }} />
+                          <Typography sx={{ fontSize: 12 }}>
+                            Invitation {expired ? "expired" : "expires"}{" "}
+                            <Box component="time" dateTime={invitation.expiresAt}>{new Date(invitation.expiresAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" })}</Box>
+                          </Typography>
+                        </Stack>
+                      )}
+                      {(actionable || (eligible && data.currentAttempt?.isFinal)) && (
+                        <Button component={Link} href="/assessment" prefetch={false} variant="contained" endIcon={<ArrowForward />} sx={{ mt: 2.5, width: { xs: "100%", sm: "auto" } }}>
+                          {data.currentAttempt?.isFinal ? "View Result" : data.canRetry ? "Start Second Attempt" : "Start Assessment"}
+                        </Button>
+                      )}
                     </Box>
-                  )}
-                </Box>
-                <Divider />
-
-                {certificates.length === 0 ? (
-                  <Box sx={{ px: 3, py: 6, textAlign: "center" }}>
-                    <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: C.lavender, display: "grid", placeItems: "center", mx: "auto", mb: 2 }}>
-                      <MilitaryTechOutlined sx={{ fontSize: 28, color: P }} />
-                    </Box>
-                    <Typography sx={{ fontSize: 15, fontWeight: 700, mb: 0.5 }}>No certificates yet</Typography>
-                    <Typography sx={{ fontSize: 13, color: C.muted }}>Complete an assessment to earn your first certificate.</Typography>
                   </Box>
-                ) : (
-                  <Stack divider={<Divider flexItem />}>
-                    {certificates.map((cert) => (
-                      <CertRow key={cert.id} cert={cert} />
-                    ))}
-                  </Stack>
-                )}
-
-                <Divider />
-                <Box sx={{ px: { xs: 2.25, sm: 3 }, py: 1.5, bgcolor: "#FAF7FF", display: "flex", alignItems: "center", gap: 0.75 }}>
-                  <SecurityOutlined sx={{ fontSize: 13, color: C.muted }} />
-                  <Typography sx={{ fontSize: 11.5, color: C.muted }}>
-                    Certificates signed cryptographically by SEBSA Evaluation Authority.
-                  </Typography>
                 </Box>
-              </Card>
-            </Stack>
+              )}
+            </Card>
+
+            <Card component="section" aria-labelledby="history-heading" sx={surface}>
+              <Box sx={{ px: { xs: 2.5, sm: 3 }, py: 2, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+                <Box>
+                  <Typography id="history-heading" component="h2" sx={{ fontSize: 17, fontWeight: 700 }}>Certificates & results</Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: 13, color: muted }}>Your recent achievements, including previous assessment cycles.</Typography>
+                </Box>
+                <Button component={Link} href="/certificates" endIcon={<ArrowForward sx={{ fontSize: 16 }} />} size="small">View all</Button>
+              </Box>
+              <Divider />
+              {data.certificates.length === 0 ? (
+                <EmptyState icon={<WorkspacePremiumOutlined />} title="No certificates yet" text="Pass an assessment to earn a certificate. Your issued certificates will appear here." />
+              ) : (
+                <Stack divider={<Divider />}>
+                  {data.certificates.slice(0, 3).map(cert => <CertificateRow key={cert.id} cert={cert} />)}
+                </Stack>
+              )}
+              <Box sx={{ px: { xs: 2.5, sm: 3 }, py: 1.5, bgcolor: "#FCFBFE", display: "flex", gap: 1, alignItems: "center", borderTop: "1px solid #EEEAF3" }}>
+                <HistoryOutlined sx={{ color: muted, fontSize: 16 }} />
+                <Typography sx={{ fontSize: 12, color: muted }}>Previously issued certificates remain available after a cycle closes.</Typography>
+              </Box>
+            </Card>
           </Stack>
-        )}
+        ) : null}
       </Container>
     </Box>
   );
 }
 
-// ── Sub-components ───────────────────────────────────────────────────────────
-
-function ProfileField({
-  icon,
-  label,
-  value,
-  mono = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: string;
-  mono?: boolean;
-}) {
-  const C = sebsaColors;
-  const P = C.primary;
+function Metric({ label, value, caption, icon }: { label: string; value: number; caption: string; icon: React.ReactNode }) {
   return (
-    <Box sx={{ py: 1.75, display: "flex", alignItems: "flex-start", gap: 1.5 }}>
-      <Box sx={{ width: 30, height: 30, borderRadius: 1, bgcolor: C.lavender, color: P, display: "grid", placeItems: "center", flexShrink: 0, mt: 0.15 }}>
-        {icon}
+    <Card sx={{ ...surface, p: 2.5, display: "flex", gap: 2, alignItems: "center" }}>
+      <Box sx={iconBox}>{icon}</Box>
+      <Box>
+        <Typography sx={{ color: muted, fontSize: 12, fontWeight: 600 }}>{label}</Typography>
+        <Typography sx={{ fontSize: 28, lineHeight: 1.35, fontWeight: 750, color: P }}>{value}</Typography>
+        <Typography sx={{ color: muted, fontSize: 11 }}>{caption}</Typography>
       </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: ".08em", color: C.muted, mb: 0.35 }}>{label}</Typography>
-        <Typography
-          sx={{
-            fontSize: 13,
-            fontWeight: mono ? 500 : 600,
-            fontFamily: mono ? "monospace" : undefined,
-            color: C.ink,
-            overflowWrap: "anywhere",
-            lineHeight: 1.4,
-          }}
-        >
-          {value || "—"}
-        </Typography>
-      </Box>
-    </Box>
+    </Card>
   );
 }
 
-function AssessmentBanner({
-  pending,
-  canRetry,
-  cycle,
-  attempt,
-}: {
-  pending: boolean;
-  canRetry: boolean;
-  cycle: ActiveCycle | null;
-  attempt: { score: number; passed?: boolean } | null;
-}) {
-  const C = sebsaColors;
-  const P = C.primary;
+function EmptyState({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+  return (
+    <Stack direction="row" spacing={2} sx={{ p: { xs: 2.5, sm: 3 }, alignItems: "flex-start" }}>
+      <Box sx={iconBox}>{icon}</Box>
+      <Box>
+        <Typography sx={{ fontSize: 14, fontWeight: 700, mb: 0.5 }}>{title}</Typography>
+        <Typography sx={{ fontSize: 13, lineHeight: 1.65, color: muted, maxWidth: 540 }}>{text}</Typography>
+      </Box>
+    </Stack>
+  );
+}
 
-  // Retry available: attempt 1 done, score < threshold
-  if (canRetry && attempt) {
-    return (
-      <Box
-        sx={{
-          p: { xs: 2, sm: 2.75 },
-          borderRadius: 2.5,
-          background: "linear-gradient(120deg, #FFFBEB 0%, #FEF3C7 100%)",
-          border: "1px solid #FDE68A",
-          display: "flex",
-          flexDirection: { xs: "column", sm: "row" },
-          alignItems: { xs: "stretch", sm: "center" },
-          justifyContent: "space-between",
-          gap: 2,
-        }}
-      >
-        <Stack direction="row" spacing={1.75} sx={{ alignItems: "center", minWidth: 0 }}>
-          <Box sx={{ width: 44, height: 44, borderRadius: 1.5, bgcolor: "#FEF3C7", display: "grid", placeItems: "center", flexShrink: 0, border: "1px solid #FDE68A" }}>
-            <ReplayOutlined sx={{ color: "#B45309", fontSize: 22 }} />
-          </Box>
+function CertificateRow({ cert }: { cert: CertificateItem }) {
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const download = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/certificates/${encodeURIComponent(cert.certificateNumber)}`);
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("Your session may have expired or access is unavailable. Sign in again to download your certificate.");
+      }
+      if (!response.ok || !response.headers.get("content-type")?.includes("application/pdf")) {
+        throw new Error("Unable to download this certificate. Please try again. If the problem continues, contact HR.");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `SEBSA_Certificate_${cert.certificateNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Allow the browser to consume the URL before releasing it; loading follows the request.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause: unknown) {
+      setError(cause instanceof Error && cause.message !== "Failed to fetch"
+        ? cause.message
+        : "Unable to download this certificate. Check your connection and try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+  return (
+    <Box sx={{ px: { xs: 2.5, sm: 3 }, py: 2, "&:hover": { bgcolor: "#FCFBFE" } }}>
+      <Box sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: 2, alignItems: { sm: "center" }, justifyContent: "space-between" }}>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", minWidth: 0 }}>
+          <Box sx={iconBox}><WorkspacePremiumOutlined sx={{ fontSize: 22 }} /></Box>
           <Box sx={{ minWidth: 0 }}>
-            <Box sx={{ display: "inline-flex", alignItems: "center", px: 1, py: 0.25, borderRadius: 0.75, bgcolor: "rgba(180,83,9,0.1)", mb: 0.4 }}>
-              <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: ".06em", color: "#B45309" }}>RETRY AVAILABLE</Typography>
-            </Box>
-            <Typography sx={{ fontSize: { xs: 15, sm: 17 }, fontWeight: 800, letterSpacing: "-0.2px", color: "#92400E" }}>
-              Second Attempt Available
-            </Typography>
-            <Typography sx={{ fontSize: { xs: 12, sm: 13 }, color: "#92400E" }}>
-              You scored <b>{attempt.score}/10</b> on attempt 1. You may take one more attempt with the same questions.
+            <Typography sx={{ fontSize: 14, fontWeight: 700, overflowWrap: "anywhere" }}>{cert.cycleLabel || "SEBSA Assessment Certificate"}</Typography>
+            <Typography sx={{ fontSize: 12, color: muted, mt: 0.5 }}>
+              Issued <Box component="time" dateTime={cert.issuedAt}>{dateLabel(cert.issuedAt)}</Box>
+              {cert.score !== null && ` · Score ${cert.score}/10`}
             </Typography>
           </Box>
         </Stack>
-        <Button
-          component={Link}
-          href="/assessment"
-          variant="contained"
-          endIcon={<ArrowForward sx={{ fontSize: 16 }} />}
-          sx={{
-            whiteSpace: "nowrap",
-            flexShrink: 0,
-            px: 2.5,
-            py: 1.2,
-            fontSize: 13,
-            fontWeight: 700,
-            alignSelf: { xs: "stretch", sm: "center" },
-            width: { xs: "100%", sm: "auto" },
-            background: "linear-gradient(135deg, #D97706, #B45309)",
-            boxShadow: "0 4px 14px rgba(180,83,9,0.3)",
-            "&:hover": { background: "linear-gradient(135deg, #B45309, #92400E)" },
-          }}
-        >
-          Start Second Attempt
+        <Button onClick={download} disabled={downloading} aria-label={`${downloading ? "Downloading" : "Download PDF"} for ${cert.cycleLabel || "SEBSA assessment"}, certificate ${cert.certificateNumber}`} startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadOutlined />} variant="outlined" size="small" sx={{ alignSelf: { xs: "flex-start", sm: "center" }, flexShrink: 0 }}>
+          {downloading ? "Downloading…" : "Download PDF"}
         </Button>
       </Box>
-    );
-  }
-
-  // Completed (isFinal attempt done)
-  if (!pending && !canRetry) {
-    const passed = attempt?.passed;
-    return (
-      <Box
-        sx={{
-          p: { xs: 2, sm: 2.5 },
-          borderRadius: 2.5,
-          border: passed ? "1px solid #B7EFB8" : "1px solid #FECACA",
-          bgcolor: passed ? "#F0FBF0" : "#FEF2F2",
-          display: "flex",
-          alignItems: "center",
-          gap: 2,
-        }}
-      >
-        <Box sx={{ width: 40, height: 40, borderRadius: 1.5, bgcolor: passed ? "#D1FAD2" : "#FECACA", display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <CheckCircleOutlined sx={{ color: passed ? C.success : C.error, fontSize: 22 }} />
-        </Box>
-        <Box>
-          <Typography sx={{ fontSize: 14, fontWeight: 700, color: passed ? "#1A5C1C" : "#991B1B" }}>
-            {cycle?.label || "Assessment"} — {passed ? "Passed" : "Completed"}
-          </Typography>
-          <Typography sx={{ fontSize: 12, color: passed ? "#2D7D30" : "#B91C1C" }}>
-            Your score: <b>{attempt?.score ?? "—"} / 10</b>.{" "}
-            {passed ? "Certificate has been recorded." : "Pass mark not reached."}
-          </Typography>
-        </Box>
-      </Box>
-    );
-  }
-
-  return (
-    <Box
-      sx={{
-        p: { xs: 2, sm: 2.75 },
-        borderRadius: 2.5,
-        background: `linear-gradient(120deg, #F4EEFF 0%, #EDE0FF 100%)`,
-        border: "1px solid #D7C8FF",
-        display: "flex",
-        flexDirection: { xs: "column", sm: "row" },
-        alignItems: { xs: "stretch", sm: "center" },
-        justifyContent: "space-between",
-        gap: 2,
-      }}
-    >
-      <Stack direction="row" spacing={1.75} sx={{ alignItems: "center", minWidth: 0 }}>
-        <Box
-          sx={{
-            width: 44, height: 44, borderRadius: 1.5,
-            background: `linear-gradient(135deg, ${P}, #8B4FD8)`,
-            display: "grid", placeItems: "center",
-            flexShrink: 0,
-            boxShadow: `0 4px 12px rgba(62,11,120,0.3)`,
-          }}
-        >
-          <FilePresentOutlined sx={{ color: "#fff", fontSize: 22 }} />
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Box sx={{ display: "inline-flex", alignItems: "center", px: 1, py: 0.25, borderRadius: 0.75, bgcolor: "rgba(62,11,120,0.1)", mb: 0.4 }}>
-            <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: ".06em", color: P }}>ACTION REQUIRED</Typography>
-          </Box>
-          <Typography sx={{ fontSize: { xs: 15, sm: 17 }, fontWeight: 800, letterSpacing: "-0.2px" }}>
-            Assessment pending
-          </Typography>
-          <Typography sx={{ fontSize: { xs: 12, sm: 13 }, color: "#595263" }}>
-            {cycle?.label || "Assessment"} · open until{" "}
-            <b>{cycle?.deadline || "end of cycle"}</b>
-          </Typography>
-        </Box>
-      </Stack>
-      <Button
-        component={Link}
-        href="/assessment"
-        variant="contained"
-        endIcon={<ArrowForward sx={{ fontSize: 16 }} />}
-        sx={{
-          whiteSpace: "nowrap",
-          flexShrink: 0,
-          px: 2.5,
-          py: 1.2,
-          fontSize: 13,
-          fontWeight: 700,
-          alignSelf: { xs: "stretch", sm: "center" },
-          width: { xs: "100%", sm: "auto" },
-          background: `linear-gradient(135deg, ${P}, #6A2FBE)`,
-          boxShadow: `0 4px 14px rgba(62,11,120,0.35)`,
-          "&:hover": { background: `linear-gradient(135deg, #2E0858, ${P})` },
-        }}
-      >
-        Start Assessment
-      </Button>
-    </Box>
-  );
-}
-
-function CertRow({ cert }: { cert: CertificateItem }) {
-  const C = sebsaColors;
-  const P = C.primary;
-  const [downloading, setDownloading] = useState(false);
-
-  const handleDownload = () => {
-    setDownloading(true);
-    window.open(`/api/certificates/${cert.certificateNumber}`, "_blank");
-    setTimeout(() => setDownloading(false), 1500);
-  };
-
-  const title = cert.cycleLabel
-    ? `SEBSA Assessment Portal — ${cert.cycleLabel}`
-    : "SEBSA Assessment Certificate";
-
-  const scoreColor = cert.score !== null
-    ? cert.score >= 6 ? { bg: "#D1FAD2", fg: "#1A5C1C" } : { bg: "#FDEAEA", fg: "#A30D0D" }
-    : null;
-
-  return (
-    <Box
-      sx={{
-        px: { xs: 2.25, sm: 3 },
-        py: { xs: 1.75, sm: 1.5 },
-        display: "flex",
-        flexDirection: { xs: "column", sm: "row" },
-        alignItems: { xs: "stretch", sm: "center" },
-        justifyContent: "space-between",
-        gap: { xs: 1.5, sm: 2 },
-        transition: "background 0.1s",
-        "&:hover": { bgcolor: "#FAF7FF" },
-      }}
-    >
-      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", minWidth: 0 }}>
-        <Box sx={{ width: 36, height: 36, borderRadius: 1.5, bgcolor: C.lavender, color: P, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          <MilitaryTechOutlined sx={{ fontSize: 20 }} />
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: { xs: 13.5, sm: 14.5 }, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: { xs: "normal", sm: "nowrap" } }}>
-            {title}
-          </Typography>
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mt: 0.3, flexWrap: "wrap", gap: 0 }}>
-            <CalendarToday sx={{ fontSize: 11, color: C.muted }} />
-            <Typography sx={{ fontSize: 11.5, color: C.muted, ml: "4px !important" }}>
-              {new Date(cert.issuedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-            </Typography>
-            {cert.score !== null && (
-              <>
-                <Box component="span" sx={{ mx: 0.75, color: C.muted, fontSize: 11 }}>·</Box>
-                <Typography sx={{ fontSize: 11.5, color: C.muted }}>Score <b>{cert.score}/10</b></Typography>
-              </>
-            )}
-          </Stack>
-        </Box>
-      </Stack>
-
-      <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", justifyContent: { xs: "space-between", sm: "flex-end" }, flexShrink: 0 }}>
-        {scoreColor && cert.score !== null && (
-          <Box sx={{ px: 1.1, py: 0.45, borderRadius: 1, bgcolor: scoreColor.bg }}>
-            <Typography sx={{ fontSize: 11.5, fontWeight: 800, color: scoreColor.fg }}>
-              {cert.score}/10
-            </Typography>
-          </Box>
-        )}
-        <Button
-          type="button"
-          startIcon={downloading ? <CircularProgress size={11} color="inherit" /> : <Download sx={{ fontSize: 15 }} />}
-          onClick={handleDownload}
-          disabled={downloading}
-          sx={{
-            minWidth: 0,
-            color: P,
-            fontSize: 12,
-            fontWeight: 700,
-            px: 1.25,
-            py: 0.5,
-            borderRadius: 1,
-            bgcolor: C.lavender,
-            "&:hover": { bgcolor: "#E4D9FF" },
-          }}
-        >
-          {downloading ? "Opening…" : "Download"}
-        </Button>
-      </Stack>
+      {error && <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert>}
     </Box>
   );
 }
 
 function DashboardSkeleton() {
   return (
-    <Stack direction={{ xs: "column", lg: "row" }} spacing={{ xs: 2.5, md: 3 }}>
-      <Box sx={{ width: { xs: "100%", lg: 304 }, flexShrink: 0 }}>
-        <Skeleton variant="rounded" height={480} sx={{ borderRadius: 3 }} />
+    <Box role="status" aria-label="Loading your dashboard">
+      <Typography sx={{ fontSize: 14, color: muted, mb: 2 }}>Loading your dashboard…</Typography>
+      <Skeleton variant="rounded" width="60%" height={36} sx={{ mb: 3 }} />
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2, mb: 3 }}>
+        {[0, 1, 2].map(i => <Skeleton key={i} variant="rounded" height={112} />)}
       </Box>
-      <Stack spacing={2.5} sx={{ flex: 1 }}>
-        <Skeleton variant="rounded" height={110} sx={{ borderRadius: 2.5 }} />
-        <Skeleton variant="rounded" height={320} sx={{ borderRadius: 2.5 }} />
-      </Stack>
-    </Stack>
+      <Skeleton variant="rounded" height={220} sx={{ mb: 3 }} />
+      <Skeleton variant="rounded" height={220} />
+    </Box>
   );
 }

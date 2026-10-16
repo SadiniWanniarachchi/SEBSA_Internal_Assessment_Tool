@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tests for the Brevo email service (src/lib/email/index.ts).
  *
  * All outbound HTTP calls are intercepted via jest.spyOn(global, "fetch").
@@ -7,9 +7,9 @@
 
 import { sendAssessmentInvitation, sendCertificateEmail } from "@/lib/email";
 
-// ── Test helpers ──────────────────────────────────────────────────────────────
+// â”€â”€ Test helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const FAKE_API_KEY = "xkeysib-test-api-key-not-real";
+const FAKE_API_KEY = "test-brevo-key-api-key-not-real";
 
 function mockFetchOk(status = 201) {
   return jest
@@ -43,7 +43,7 @@ function setEnv(overrides: Record<string, string | undefined>) {
   };
 }
 
-// ── Assessment Invitation ─────────────────────────────────────────────────────
+// â”€â”€ Assessment Invitation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe("sendAssessmentInvitation", () => {
   const inviteParams = {
@@ -171,7 +171,7 @@ describe("sendAssessmentInvitation", () => {
   });
 });
 
-// ── Certificate Email ─────────────────────────────────────────────────────────
+// â”€â”€ Certificate Email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe("sendCertificateEmail", () => {
   const certParams = {
@@ -261,7 +261,7 @@ describe("sendCertificateEmail", () => {
     restore();
   });
 
-  it("throws when Brevo rejects the request — does not silently succeed", async () => {
+  it("throws when Brevo rejects the request â€” does not silently succeed", async () => {
     const restore = setEnv({ BREVO_API_KEY: FAKE_API_KEY, HR_EMAIL_CC: "" });
     mockFetchError(422, '{"message":"Invalid sender"}');
 
@@ -283,7 +283,7 @@ describe("sendCertificateEmail", () => {
   });
 });
 
-// ── Error body propagation ────────────────────────────────────────────────────
+// â”€â”€ Error body propagation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe("error body propagation", () => {
   const inviteParams = {
@@ -298,7 +298,7 @@ describe("error body propagation", () => {
   it("includes a sanitized Brevo response snippet in the thrown error", async () => {
     const restore = setEnv({ BREVO_API_KEY: FAKE_API_KEY });
     jest.spyOn(global, "fetch").mockResolvedValue(
-      new Response('{"message":"Invalid sender — not verified","code":"unauthorized"}', { status: 401 }),
+      new Response('{"message":"Invalid sender â€” not verified","code":"unauthorized"}', { status: 401 }),
     );
 
     try {
@@ -364,7 +364,7 @@ describe("error body propagation", () => {
   });
 });
 
-// ── Sender configuration ──────────────────────────────────────────────────────
+// â”€â”€ Sender configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe("sender configuration", () => {
   afterEach(() => jest.restoreAllMocks());

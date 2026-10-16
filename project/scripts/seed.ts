@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+﻿import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 import dns from "node:dns";
 try {
@@ -11,71 +11,46 @@ import { AdminUser, Employee, Question } from "../src/db/models";
 import { hashPassword } from "../src/lib/auth";
 
 async function seed() {
+  if (!process.env.SEED_ADMIN_PASSWORD || !process.env.SEED_EMPLOYEE_PASSWORD) {
+    throw new Error("SEED_ADMIN_PASSWORD and SEED_EMPLOYEE_PASSWORD must be set for seeding.");
+  }
+
   if (!process.env.MONGODB_URI) {
-    console.error("❌ MONGODB_URI is not set in .env.local");
+    console.error("Ã¢ÂÅ’ MONGODB_URI is not set in .env.local");
     process.exit(1);
   }
 
   try {
-    console.log("⏳ Connecting to MongoDB...");
+    console.log("Ã¢ÂÂ³ Connecting to MongoDB...");
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log("✅ Connected to MongoDB.");
+    console.log("Ã¢Å“â€¦ Connected to MongoDB.");
 
     // Clear existing users for a fresh start (optional, uncomment if needed)
     // await AdminUser.deleteMany({});
     // await Employee.deleteMany({});
     // await Question.deleteMany({});
 
-    // ── Create default Admin ────────────────────────────────────────────────
-    const adminEmail = "admin@sebsaworld.com";
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Create default Admin Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    const adminEmail = process.env.SEED_ADMIN_EMAIL;
     const existingAdmin = await AdminUser.findOne({ email: adminEmail });
     
     if (!existingAdmin) {
-      const adminPassword = await hashPassword("admin123");
+      const adminPassword = await hashPassword(process.env.SEED_ADMIN_PASSWORD ?? "");
       await AdminUser.create({
-        fullName: "System Admin",
+        fullName: process.env.SEED_ADMIN_NAME ?? "SEBSA Administrator",
         email: adminEmail,
         passwordHash: adminPassword,
         role: "admin",
       });
-      console.log(`✅ Default Admin created: ${adminEmail} (password: admin123)`);
+      console.log("Default Admin created");
     } else {
-      console.log(`ℹ️ Admin ${adminEmail} already exists.`);
+      console.log(`Ã¢â€žÂ¹Ã¯Â¸Â Admin ${adminEmail} already exists.`);
     }
 
-    // ── Create default Employees ───────────────────────────────────────────
-    const employeesToSeed = [
-      {
-        fullName: "Sadini Wanniarachchi",
-        email: "sadini.wanniarachchi@sebsaworld.com",
-        department: "Enterprise Consulting",
-        roleTitle: "Senior ERP Consultant · Supply Chain Practice",
-        employeeIdCode: "SBS-0482",
-        tierBadge: "Tier-1 Certified",
-        joinedDate: new Date("2021-03-15"),
-        password: "emp123",
-      },
-      {
-        fullName: "Sadini Wanniarachchi",
-        email: "sadini@sebsaworld.com",
-        department: "Enterprise Consulting",
-        roleTitle: "Senior ERP Consultant · Supply Chain Practice",
-        employeeIdCode: "SBS-0482",
-        tierBadge: "Tier-1 Certified",
-        joinedDate: new Date("2021-03-15"),
-        password: "emp123",
-      },
-      {
-        fullName: "Test Employee",
-        email: "employee@sebsaworld.com",
-        department: "IT",
-        roleTitle: "Software Engineer",
-        employeeIdCode: "SBS-0100",
-        tierBadge: "Tier-2 Certified",
-        joinedDate: new Date("2022-01-10"),
-        password: "emp123",
-      }
-    ];
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Create default Employees Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    const employeesToSeed = process.env.SEED_EMPLOYEES_JSON
+      ? JSON.parse(process.env.SEED_EMPLOYEES_JSON)
+      : [];
 
     for (const emp of employeesToSeed) {
       const existing = await Employee.findOne({ email: emp.email });
@@ -92,13 +67,13 @@ async function seed() {
           passwordHash,
           status: "active",
         });
-        console.log(`✅ Employee created: ${emp.email} (password: ${emp.password})`);
+        console.log(`Employee created: ${emp.email}`);
       } else {
-        console.log(`ℹ️ Employee ${emp.email} already exists.`);
-      }
+        console.log(`Ã¢â€žÂ¹Ã¯Â¸Â Employee ${emp.email} already exists.`);
     }
+      }
 
-    // ── Create active AssessmentCycle ───────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Create active AssessmentCycle Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     const { AssessmentCycle } = await import("../src/db/models");
     const adminRecord = await AdminUser.findOne({ email: adminEmail });
     const existingCycle = await AssessmentCycle.findOne({ status: "active" });
@@ -109,12 +84,12 @@ async function seed() {
         openedAt: new Date(),
         openedBy: adminRecord._id,
       });
-      console.log("✅ Active AssessmentCycle created: 2026 H2");
+      console.log("Ã¢Å“â€¦ Active AssessmentCycle created: 2026 H2");
     } else {
-      console.log("ℹ️ Active AssessmentCycle already exists.");
+      console.log("Ã¢â€žÂ¹Ã¯Â¸Â Active AssessmentCycle already exists.");
     }
 
-    // ── Create Questions from documents or fallback to samples ──────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Create Questions from documents or fallback to samples Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     const count = await Question.countDocuments();
     if (count === 0) {
       const fs = await import("fs");
@@ -138,10 +113,10 @@ async function seed() {
               category:      "Confidentiality & Data Protection",
               status:        "active",
             }));
-            console.log(`📄 Loaded ${questionsToInsert.length} questions from documents dataset.`);
+            console.log(`Ã°Å¸â€œâ€ž Loaded ${questionsToInsert.length} questions from documents dataset.`);
           }
         } catch (err) {
-          console.warn("⚠️ Failed reading questions JSON file, using fallback sample questions:", err);
+          console.warn("Ã¢Å¡Â Ã¯Â¸Â Failed reading questions JSON file, using fallback sample questions:", err);
         }
       }
 
@@ -171,16 +146,16 @@ async function seed() {
       }
 
       await Question.insertMany(questionsToInsert);
-      console.log(`✅ Inserted ${questionsToInsert.length} questions into the database.`);
+      console.log(`Ã¢Å“â€¦ Inserted ${questionsToInsert.length} questions into the database.`);
     } else {
-      console.log(`ℹ️ Questions already exist in the database (${count} questions found).`);
+      console.log(`Ã¢â€žÂ¹Ã¯Â¸Â Questions already exist in the database (${count} questions found).`);
     }
 
-    console.log("🎉 Seeding completed successfully!");
+    console.log("Ã°Å¸Å½â€° Seeding completed successfully!");
     process.exit(0);
 
   } catch (error) {
-    console.error("❌ Seeding failed:", error);
+    console.error("Ã¢ÂÅ’ Seeding failed:", error);
     process.exit(1);
   }
 }

@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import dns from "node:dns";
 
 // Force IPv4 DNS resolution to avoid slow SRV lookups on Windows
@@ -20,7 +20,7 @@ function getMongoUri(): string {
   if (!uri) {
     throw new Error(
       "MONGODB_URI is not set. Please add it to your .env.local file.\n" +
-      "Example: MONGODB_URI=mongodb://localhost:27017/sebsa_assessment"
+      "MONGODB_URI is not set. Please add it to your server environment."
     );
   }
   return uri;
@@ -36,7 +36,7 @@ const CONNECT_OPTS: mongoose.ConnectOptions = {
 };
 
 export async function connectDB(): Promise<typeof mongoose> {
-  // Already connected — fast path
+  // Already connected â€” fast path
   if (mongoose.connection.readyState === 1) return mongoose;
 
   // Reuse the cached promise across hot reloads (dev) and concurrent requests (prod).

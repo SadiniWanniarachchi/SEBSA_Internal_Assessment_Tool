@@ -10,8 +10,12 @@ build/
 dist/
 
 # Local Environment Secrets
-.env*.local
-**/.env*.local
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
 
 # Logs
 *.log
@@ -28,5 +32,22 @@ Thumbs.db
 **/test-results/
 **/coverage/
 
-# Local assessment documents
-documents/
+# Local assessment documents (confidential; never commit or push)
+/documents/
+/document/
+
+# Private credentials and local database exports
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*.jks
+*.keystore
+*.sql
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
